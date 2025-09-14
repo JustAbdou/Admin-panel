@@ -15,17 +15,15 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #3182ce;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #2c5aa0;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
@@ -47,22 +45,423 @@ button {
   transition: border-color 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: #3182ce;
 }
 button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+/* Modern FAB Restaurant Switcher */
+.restaurant-fab-switcher {
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+  max-width: 300px;
+}
+
+.restaurant-fab-single {
+  position: relative;
+}
+
+.restaurant-fab-single .fab-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+  border-radius: 50px;
+  box-shadow: 0 8px 32px rgba(49, 130, 206, 0.3);
+  color: white;
+  font-weight: 500;
+  min-width: 200px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.restaurant-fab-single .fab-icon svg {
+  stroke: currentColor;
+}
+
+.restaurant-fab-single .fab-restaurant-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.restaurant-fab {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(49, 130, 206, 0.3);
+  color: white;
+  font-weight: 500;
+  min-width: 240px;
+  max-width: 280px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.restaurant-fab::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.6s ease;
+}
+
+.restaurant-fab:hover::before {
+  left: 100%;
+}
+
+.restaurant-fab:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 48px rgba(49, 130, 206, 0.4);
+  background: linear-gradient(135deg, #2c5aa0 0%, #1e3a8a 100%);
+}
+
+.restaurant-fab.fab-active {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 48px rgba(49, 130, 206, 0.5);
+  background: linear-gradient(135deg, #2c5aa0 0%, #1e3a8a 100%);
+}
+
+.restaurant-fab.fab-loading {
+  pointer-events: none;
+}
+
+.fab-dropdown {
+  position: absolute;
+  top: calc(100% + 16px);
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgba(49, 130, 206, 0.15);
+  overflow: hidden;
+  z-index: 1001;
+  animation: fab-dropdown-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fab-dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.9);
   }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
+
+.fab-dropdown-header {
+  padding: 1.5rem 1.5rem 1rem;
+  background: linear-gradient(135deg, #f8faff 0%, #f1f5ff 100%);
+  border-bottom: 1px solid rgba(49, 130, 206, 0.1);
+}
+
+.fab-dropdown-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #374151;
+  letter-spacing: 0.5px;
+}
+
+.fab-dropdown-subtitle {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.fab-dropdown-content {
+  padding: 0.5rem;
+}
+
+.fab-option {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  border-radius: 16px;
+  margin-bottom: 0.5rem;
+  position: relative;
+  overflow: hidden;
+  animation: fab-option-enter 0.3s ease-out both;
+}
+
+@keyframes fab-option-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fab-option:last-child {
+  margin-bottom: 0;
+}
+
+.fab-option::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(49, 130, 206, 0.05), transparent);
+  transition: left 0.5s ease;
+}
+
+.fab-option:hover::before {
+  left: 100%;
+}
+
+.fab-option:hover {
+  background: linear-gradient(135deg, rgba(49, 130, 206, 0.08) 0%, rgba(44, 90, 160, 0.08) 100%);
+  transform: translateX(4px);
+  box-shadow: 0 4px 20px rgba(49, 130, 206, 0.1);
+}
+
+.fab-option.fab-option-active {
+  background: linear-gradient(135deg, rgba(49, 130, 206, 0.15) 0%, rgba(44, 90, 160, 0.15) 100%);
+  box-shadow: 0 4px 20px rgba(49, 130, 206, 0.2);
+  border: 1px solid rgba(49, 130, 206, 0.2);
+}
+
+.fab-option-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.fab-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+  border-radius: 16px;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(49, 130, 206, 0.3);
+  transition: all 0.3s ease;
+}
+
+.fab-option:hover .fab-option-icon {
+  transform: scale(1.1) rotate(3deg);
+  box-shadow: 0 8px 24px rgba(49, 130, 206, 0.4);
+}
+
+.fab-option-icon svg {
+  stroke: currentColor;
+}
+
+.fab-option-details {
+  display: flex;
+  flex-direction: column;
+  margin-left: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.fab-option-name {
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+}
+
+.fab-option-id {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+  margin-top: 0.25rem;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+
+.fab-option-indicator {
+  color: #059669;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(5, 150, 105, 0.1);
+  border-radius: 50%;
+  animation: fab-check-bounce 0.5s ease-out;
+}
+
+@keyframes fab-check-bounce {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.fab-option-indicator svg {
+  stroke: currentColor;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .fab-dropdown {
+    background: rgba(17, 24, 39, 0.98);
+    border-color: rgba(75, 85, 99, 0.6);
+  }
+  
+  .fab-dropdown-header {
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.9) 0%, rgba(31, 41, 55, 0.9) 100%);
+    border-bottom-color: rgba(75, 85, 99, 0.3);
+  }
+  
+  .fab-dropdown-header h3 {
+    color: #f9fafb;
+  }
+  
+  .fab-dropdown-subtitle {
+    color: #d1d5db;
+  }
+  
+  .fab-option:hover {
+    background: linear-gradient(135deg, rgba(49, 130, 206, 0.12) 0%, rgba(44, 90, 160, 0.12) 100%);
+  }
+  
+  .fab-option.fab-option-active {
+    background: linear-gradient(135deg, rgba(49, 130, 206, 0.2) 0%, rgba(44, 90, 160, 0.2) 100%);
+  }
+  
+  .fab-option-name {
+    color: #f9fafb;
+  }
+  
+  .fab-option-id {
+    color: #d1d5db;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .restaurant-fab {
+    min-width: 240px;
+    padding: 0.625rem 1rem;
+  }
+  
+  .fab-primary-text {
+    font-size: 0.9rem;
+  }
+  
+  .fab-secondary-text {
+    font-size: 0.75rem;
+  }
+  
+  .fab-dropdown {
+    left: -12px;
+    right: -12px;
+    margin-top: 8px;
+  }
+  
+  .fab-dropdown-header {
+    padding: 1.25rem 1.25rem 0.75rem;
+  }
+  
+  .fab-dropdown-header h3 {
+    font-size: 1.1rem;
+  }
+  
+  .fab-option {
+    padding: 0.875rem 1rem;
+  }
+  
+  .fab-option-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .fab-option-name {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .restaurant-fab {
+    min-width: 200px;
+    padding: 0.5rem 0.875rem;
+  }
+  
+  .fab-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .fab-icon svg,
+  .fab-loading-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .fab-expand-icon {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .fab-expand-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/* Compact FAB for restaurant info block */
+.restaurant-fab-switcher.compact {
+  max-width: 250px;
+}
+
+.restaurant-fab-switcher.compact .restaurant-fab {
+  min-width: 200px;
+  max-width: 240px;
+  padding: 0.5rem 1rem;
+}
+
+.restaurant-fab-switcher.compact .fab-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.restaurant-fab-switcher.compact .fab-primary-text {
+  font-size: 0.9rem;
+}
+
+.restaurant-fab-switcher.compact .fab-secondary-text {
+  font-size: 0.75rem;
+}
+
+.restaurant-fab-switcher.compact .fab-dropdown {
+  top: calc(100% + 8px);
+}
+
+/* Modern FAB Restaurant Switcher */

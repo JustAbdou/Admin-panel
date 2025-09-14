@@ -11,6 +11,7 @@ const SignUp: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [restaurantId, setRestaurantId] = useState('');
+  const [additionalRestaurantIds, setAdditionalRestaurantIds] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -33,12 +34,21 @@ const SignUp: React.FC = () => {
     }
 
     try {
-      const restaurantExists = await checkRestaurantExists(restaurantId);
-      
-      if (!restaurantExists) {
-        setError('Restaurant ID does not exist. Please contact us to purchase a valid restaurant ID.');
-        setLoading(false);
-        return;
+      // Parse restaurant IDs (primary + secondary ones)
+      const allRestaurantIds = [restaurantId];
+      if (additionalRestaurantIds.trim()) {
+        const additional = additionalRestaurantIds.split(',').map(id => id.trim()).filter(id => id);
+        allRestaurantIds.push(...additional);
+      }
+
+      // Validate all restaurant IDs exist
+      for (const id of allRestaurantIds) {
+        const restaurantExists = await checkRestaurantExists(id);
+        if (!restaurantExists) {
+          setError(`Restaurant ID "${id}" does not exist. Please contact us to purchase valid restaurant IDs.`);
+          setLoading(false);
+          return;
+        }
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -47,9 +57,10 @@ const SignUp: React.FC = () => {
       await setDoc(doc(db, 'users', user.uid), {
         fullName: fullName,
         email: user.email,
-        restaurantId: restaurantId,
+        restaurantId: restaurantId, // Primary restaurant (backward compatibility)
+        restaurantIds: allRestaurantIds, // All restaurant IDs for multi-restaurant support
         createdAt: new Date().toISOString(),
-        role: 'admin',
+        role: 'manager',
         isRestaurantOwner: true
       });
 
@@ -98,7 +109,7 @@ const SignUp: React.FC = () => {
 
           <div className="form-group">
             <label htmlFor="restaurantId" className="form-label">
-              Restaurant ID *
+              Primary Restaurant ID *
             </label>
             <input
               type="text"
@@ -107,10 +118,27 @@ const SignUp: React.FC = () => {
               value={restaurantId}
               onChange={(e) => setRestaurantId(e.target.value)}
               required
-              placeholder="Enter your purchased restaurant ID"
+              placeholder="Enter your main restaurant ID"
             />
             <small className="form-help-text">
-              You must purchase a restaurant ID from us before signing up. Contact our sales team if you don't have one.
+              This will be your primary restaurant. You must purchase restaurant IDs from us before signing up.
+            </small>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="additionalRestaurantIds" className="form-label">
+              Secondary Restaurant IDs (Optional)
+            </label>
+            <input
+              type="text"
+              id="additionalRestaurantIds"
+              className="form-input"
+              value={additionalRestaurantIds}
+              onChange={(e) => setAdditionalRestaurantIds(e.target.value)}
+              placeholder="restaurant2, restaurant3, restaurant4"
+            />
+            <small className="form-help-text">
+              Enter secondary restaurant IDs separated by commas if you own multiple restaurants.
             </small>
           </div>
 

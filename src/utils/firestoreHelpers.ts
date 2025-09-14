@@ -217,6 +217,7 @@ export const createDeliveryLogDocument = async (
 export const createFridgeLogDocument = async (
   restaurantId: string, 
   fridgeName: string, 
+  fridgeType: 'fridge' | 'freezer',
   createdBy: string
 ): Promise<void> => {
   const fridgeLogsCollection = getFridgeLogsCollection(restaurantId);
@@ -225,6 +226,7 @@ export const createFridgeLogDocument = async (
   await setDoc(docRef, {
     id: docRef.id,
     fridgeName,
+    fridgeType,
     date: '',
     temperatureAM: '',
     temperaturePM: '',
@@ -234,15 +236,24 @@ export const createFridgeLogDocument = async (
   });
 };
 
-// Get fridge names from fridge logs collection
-export const getFridgeNamesFromLogs = async (restaurantId: string): Promise<string[]> => {
+// Get fridge data from fridge logs collection
+export const getFridgeNamesFromLogs = async (restaurantId: string): Promise<{name: string, type: 'fridge' | 'freezer'}[]> => {
   const fridgeLogsCollection = getFridgeLogsCollection(restaurantId);
   const snapshot = await getDocs(fridgeLogsCollection);
-  const fridgeNames = snapshot.docs
+  const fridgeData = snapshot.docs
     .map(doc => doc.data())
     .filter(data => !data.createdAt) // Only items without createdAt field
-    .map(data => data.fridgeName);
-  return Array.from(new Set(fridgeNames)); // Remove duplicates
+    .map(data => ({
+      name: data.fridgeName,
+      type: data.fridgeType || 'fridge' // Default to 'fridge' for existing entries
+    }));
+  
+  // Remove duplicates by name
+  const uniqueFridges = fridgeData.filter((fridge, index, self) => 
+    index === self.findIndex(f => f.name === fridge.name)
+  );
+  
+  return uniqueFridges;
 };
 
 // Get supplier names from delivery logs collection  
@@ -274,4 +285,70 @@ export const deleteDeliveryLogDocument = async (
   const deliveryLogsCollection = getDeliveryLogsCollection(restaurantId);
   const docRef = doc(deliveryLogsCollection, supplierName);
   await deleteDoc(docRef);
+};
+
+// Utility function to add restaurant IDs to existing user
+export const addRestaurantToUser = async (userId: string, restaurantId: string): Promise<boolean> => {
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('User not found');
+    }
+    
+    const userData = userDoc.data();
+    const currentRestaurantIds = userData.restaurantIds || [userData.restaurantId];
+    
+    if (!currentRestaurantIds.includes(restaurantId)) {
+      const updatedRestaurantIds = [...currentRestaurantIds, restaurantId];
+      
+      await setDoc(userDocRef, {
+        ...userData,
+        restaurantIds: updatedRestaurantIds
+      }, { merge: true });
+      
+      return true;
+    }
+    
+    return false; // Restaurant ID already exists
+  } catch (error) {
+    console.error('Error adding restaurant to user:', error);
+    throw error;
+  }
+};
+
+// Utility function to remove restaurant ID from user
+export const removeRestaurantFromUser = async (userId: string, restaurantId: string): Promise<boolean> => {
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('User not found');
+    }
+    
+    const userData = userDoc.data();
+    const currentRestaurantIds = userData.restaurantIds || [userData.restaurantId];
+    
+    if (currentRestaurantIds.length <= 1) {
+      throw new Error('Cannot remove the last restaurant from user');
+    }
+    
+    const updatedRestaurantIds = currentRestaurantIds.filter((id: string) => id !== restaurantId);
+    
+    // If we're removing the primary restaurant, set a new primary
+    const newPrimaryRestaurantId = updatedRestaurantIds[0];
+    
+    await setDoc(userDocRef, {
+      ...userData,
+      restaurantId: newPrimaryRestaurantId,
+      restaurantIds: updatedRestaurantIds
+    }, { merge: true });
+    
+    return true;
+  } catch (error) {
+    console.error('Error removing restaurant from user:', error);
+    throw error;
+  }
 };

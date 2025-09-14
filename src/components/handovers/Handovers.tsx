@@ -278,7 +278,7 @@ const Handovers: React.FC = () => {
                     cursor: pdfUrl ? 'pointer' : 'default',
                     transition: 'all 0.3s ease',
                     border: pdfUrl ? '2px solid transparent' : '1px solid var(--border)',
-                    background: pdfUrl ? 'linear-gradient(white, white) padding-box, linear-gradient(45deg, var(--primary-color), var(--secondary-color, #6366f1)) border-box' : undefined,
+                    background: pdfUrl ? 'linear-gradient(white, white) padding-box, linear-gradient(45deg, var(--primary-color), var(--secondary-color, #3182ce)) border-box' : undefined,
                   }}
                   onMouseEnter={(e) => {
                     if (pdfUrl) {

@@ -12,6 +12,7 @@ import {
 } from '../../utils/firestoreHelpers';
 import { db } from '../../firebase';
 import Layout from '../layout/Layout';
+import RestaurantSwitcher from '../layout/RestaurantSwitcher';
 
 interface DashboardStats {
   totalPrepItems: number;
@@ -342,14 +343,17 @@ const Dashboard: React.FC = () => {
             border: '1px solid var(--border)',
             marginBottom: '2rem'
           }}>
-            <h2 style={{ 
-              fontSize: '1.5rem', 
-              fontWeight: 'bold', 
-              marginBottom: '0.5rem',
-              color: 'var(--primary-color)'
-            }}>
-              {restaurantInfo.name}
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <h2 style={{ 
+                fontSize: '1.5rem', 
+                fontWeight: 'bold', 
+                margin: 0,
+                color: 'var(--primary-color)'
+              }}>
+                {restaurantInfo.name}
+              </h2>
+              <RestaurantSwitcher compact />
+            </div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
               Restaurant ID: {restaurantId}
               {restaurantInfo.address && (

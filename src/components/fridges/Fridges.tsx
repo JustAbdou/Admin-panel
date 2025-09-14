@@ -5,10 +5,11 @@ import Layout from '../layout/Layout';
 
 const Fridges: React.FC = () => {
   const { restaurantId, user } = useRestaurant();
-  const [fridgeNames, setFridgeNames] = useState<string[]>([]);
+  const [fridges, setFridges] = useState<{name: string, type: 'fridge' | 'freezer'}[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newFridgeName, setNewFridgeName] = useState('');
+  const [newFridgeType, setNewFridgeType] = useState<'fridge' | 'freezer'>('fridge');
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
@@ -18,11 +19,11 @@ const Fridges: React.FC = () => {
     const fetchFridges = async () => {
       try {
         setLoading(true);
-        const names = await getFridgeNamesFromLogs(restaurantId);
-        setFridgeNames(names);
+        const fridgeData = await getFridgeNamesFromLogs(restaurantId);
+        setFridges(fridgeData);
       } catch (error) {
         console.error('Error fetching fridge names:', error);
-        setFridgeNames([]);
+        setFridges([]);
       } finally {
         setLoading(false);
       }
@@ -39,12 +40,13 @@ const Fridges: React.FC = () => {
       setAdding(true);
       
       // Create fridge log document for this fridge
-      await createFridgeLogDocument(restaurantId, newFridgeName.trim(), user.uid);
+      await createFridgeLogDocument(restaurantId, newFridgeName.trim(), newFridgeType, user.uid);
       
-      // Refresh the fridge names list
-      const updatedNames = await getFridgeNamesFromLogs(restaurantId);
-      setFridgeNames(updatedNames);
+      // Refresh the fridges list
+      const updatedFridges = await getFridgeNamesFromLogs(restaurantId);
+      setFridges(updatedFridges);
       setNewFridgeName('');
+      setNewFridgeType('fridge');
       setShowAddModal(false);
     } catch (error) {
       console.error('Error adding fridge:', error);
@@ -63,9 +65,9 @@ const Fridges: React.FC = () => {
       // Delete fridge log document
       await deleteFridgeLogDocument(restaurantId, fridgeName);
       
-      // Refresh the fridge names list
-      const updatedNames = await getFridgeNamesFromLogs(restaurantId);
-      setFridgeNames(updatedNames);
+      // Refresh the fridges list
+      const updatedFridges = await getFridgeNamesFromLogs(restaurantId);
+      setFridges(updatedFridges);
     } catch (error) {
       console.error('Error deleting fridge:', error);
       alert('Error deleting fridge. Please try again.');
@@ -95,27 +97,27 @@ const Fridges: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
             <h1 className="page-title">Fridges</h1>
             <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-              Add Fridge
+              Add Fridge/Freezer
             </button>
           </div>
 
-          {fridgeNames.length === 0 ? (
+          {fridges.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
               <div style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
                 No fridges found
               </div>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-                Get started by adding your first fridge
+                Get started by adding your first fridge or freezer
               </p>
               <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-                Add Your First Fridge
+                Add Your First Fridge/Freezer
               </button>
             </div>
           ) : (
             <div className="card">
-              <h2 className="card-title">Fridge Names ({fridgeNames.length})</h2>
+              <h2 className="card-title">Fridges & Freezers ({fridges.length})</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {fridgeNames.map((name, index) => (
+                {fridges.map((fridge, index) => (
                   <div
                     key={index}
                     style={{
@@ -131,10 +133,25 @@ const Fridges: React.FC = () => {
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--border-light)'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface)'}
                   >
-                    <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{name}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{fridge.name}</span>
+                      <span style={{ 
+                        fontSize: '0.75rem',
+                        color: fridge.type === 'freezer' ? '#1976d2' : '#7b1fa2',
+                        textTransform: 'capitalize' as const,
+                        padding: '0.125rem 0.5rem',
+                        backgroundColor: fridge.type === 'freezer' ? '#e3f2fd' : '#f3e5f5',
+                        borderRadius: '12px',
+                        fontWeight: '500',
+                        display: 'inline-block',
+                        width: 'fit-content'
+                      }}>
+                        {fridge.type === 'freezer' ? '🧊 Freezer' : '❄️ Fridge'}
+                      </span>
+                    </div>
                     <button
-                      onClick={() => handleDeleteFridge(name)}
-                      disabled={deleting === name}
+                      onClick={() => handleDeleteFridge(fridge.name)}
+                      disabled={deleting === fridge.name}
                       style={{
                         padding: '0.25rem 0.5rem',
                         fontSize: '0.75rem',
@@ -142,11 +159,11 @@ const Fridges: React.FC = () => {
                         color: 'white',
                         border: 'none',
                         borderRadius: '0.25rem',
-                        cursor: deleting === name ? 'not-allowed' : 'pointer',
-                        opacity: deleting === name ? 0.6 : 1
+                        cursor: deleting === fridge.name ? 'not-allowed' : 'pointer',
+                        opacity: deleting === fridge.name ? 0.6 : 1
                       }}
                     >
-                      {deleting === name ? 'Deleting...' : 'Delete'}
+                      {deleting === fridge.name ? 'Deleting...' : 'Delete'}
                     </button>
                   </div>
                 ))}
@@ -159,19 +176,31 @@ const Fridges: React.FC = () => {
             <div className="modal-overlay">
               <div className="modal">
                 <div className="modal-header">
-                  <h3>Add New Fridge</h3>
+                  <h3>Add New Fridge/Freezer</h3>
                 </div>
                 <form onSubmit={handleAddFridge}>
                   <div className="form-group">
-                    <label className="form-label">Fridge Name</label>
+                    <label className="form-label">Name</label>
                     <input
                       type="text"
                       className="form-input"
                       value={newFridgeName}
                       onChange={(e) => setNewFridgeName(e.target.value)}
                       required
-                      placeholder="Enter fridge name"
+                      placeholder="Enter fridge/freezer name"
                     />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Type</label>
+                    <select
+                      className="form-input"
+                      value={newFridgeType}
+                      onChange={(e) => setNewFridgeType(e.target.value as 'fridge' | 'freezer')}
+                      required
+                    >
+                      <option value="fridge">❄️ Fridge</option>
+                      <option value="freezer">🧊 Freezer</option>
+                    </select>
                   </div>
                   <div className="modal-footer">
                     <button
@@ -179,13 +208,14 @@ const Fridges: React.FC = () => {
                       onClick={() => {
                         setShowAddModal(false);
                         setNewFridgeName('');
+                        setNewFridgeType('fridge');
                       }}
                       className="btn btn-secondary"
                     >
                       Cancel
                     </button>
                     <button type="submit" className="btn btn-primary" disabled={adding}>
-                      {adding ? 'Adding...' : 'Add Fridge'}
+                      {adding ? 'Adding...' : `Add ${newFridgeType === 'freezer' ? 'Freezer' : 'Fridge'}`}
                     </button>
                   </div>
                 </form>

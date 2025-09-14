@@ -9,7 +9,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, restaurantId, restaurantName } = useRestaurant();
+  const { user } = useRestaurant();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -102,20 +102,27 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
                   {user?.email}
                 </div>
-                {(restaurantName || restaurantId) && (
-                  <div style={{ 
-                    fontSize: '0.75rem', 
-                    opacity: 0.8, 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
-                    maxWidth: '200px' 
-                  }}>
-                    🏪 {restaurantName || restaurantId}
-                  </div>
-                )}
               </div>
-              <button onClick={handleSignOut} className="btn btn-secondary btn-sm">
-                Sign Out
+              <button 
+                onClick={handleSignOut} 
+                className="btn btn-secondary btn-sm sign-out-icon"
+                title="Sign Out"
+                aria-label="Sign Out"
+              >
+                <svg 
+                  width="16" 
+                  height="16" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16,17 21,12 16,7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
               </button>
             </div>
           </div>

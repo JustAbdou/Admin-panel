@@ -11,6 +11,7 @@ import Suppliers from './components/suppliers/Suppliers';
 import Fridges from './components/fridges/Fridges';
 import Closing from './components/closing/Closing';
 import './styles/global.css';
+import './index.css';
 
 function App() {
   return (

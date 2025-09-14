@@ -309,7 +309,7 @@ const UserManagement: React.FC = () => {
     switch (role) {
       case 'employee': return '#059669';
       case 'manager': return '#dc2626';
-      case 'admin': return '#7c3aed';
+      case 'admin': return '#3182ce';
       default: return '#6b7280';
     }
   };
