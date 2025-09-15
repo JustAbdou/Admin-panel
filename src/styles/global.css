@@ -439,8 +439,13 @@ nav {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .modal-overlay {
@@ -504,24 +509,24 @@ nav {
     padding: 0.75rem 0;
     gap: 0.75rem;
   }
-  
+
   .logo {
     font-size: 1.2rem;
   }
-  
+
   .nav {
     gap: 0.25rem;
   }
-  
+
   .nav-link {
     padding: 0.3rem 0.4rem;
     font-size: 0.75rem;
   }
-  
+
   .user-menu {
     gap: 0.5rem;
   }
-  
+
   .sign-out-icon {
     min-width: 32px !important;
     height: 32px !important;
@@ -543,7 +548,7 @@ nav {
     overflow-x: auto;
     padding: 0 0.5rem;
   }
-  
+
   .nav-link {
     padding: 0.4rem 0.6rem;
     font-size: 0.8rem;
@@ -619,4 +624,89 @@ nav {
 .dashboard-stats,
 .card-grid {
   width: 100%;
+}
+
+/* Modal Styles */
+.modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+/* Utility Classes */
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.mb-1 {
+  margin-bottom: 0.25rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.mb-3 {
+  margin-bottom: 0.75rem;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
+
+.mt-1 {
+  margin-top: 0.25rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.mt-3 {
+  margin-top: 0.75rem;
+}
+
+.mt-4 {
+  margin-top: 1rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.gap-2 {
+  gap: 0.5rem;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.hidden {
+  display: none;
+}
+
+.block {
+  display: block;
 }

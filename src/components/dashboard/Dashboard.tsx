@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { query, onSnapshot, orderBy, getDoc, doc } from 'firebase/firestore';
 import { useRestaurant } from '../../contexts/RestaurantContext';
-import { 
-  getPrepListCollection, 
+import {
+  getPrepListCollection,
   getOrderListCollection,
   getClosingListCollection,
   getFridgeLogsCollection,
@@ -41,7 +41,7 @@ const fetchUserData = async (restaurantId: string, createdBy: any): Promise<stri
   if (createdBy?.fullName) return createdBy.fullName;
   if (createdBy?.userName) return createdBy.userName;
   if (createdBy?.email) return createdBy.email;
-  
+
   if (typeof createdBy === 'string') {
     try {
       const restaurantUserDoc = await getDoc(getUserDoc(restaurantId, createdBy));
@@ -49,7 +49,7 @@ const fetchUserData = async (restaurantId: string, createdBy: any): Promise<stri
         const userData = restaurantUserDoc.data();
         return userData.fullName || userData.userName || userData.email || 'Unknown User';
       }
-      
+
       const rootUserDoc = await getDoc(doc(db, 'users', createdBy));
       if (rootUserDoc.exists()) {
         const userData = rootUserDoc.data();
@@ -59,7 +59,7 @@ const fetchUserData = async (restaurantId: string, createdBy: any): Promise<stri
       console.log('Error fetching user data:', error);
     }
   }
-  
+
   return createdBy?.userName || createdBy?.user || createdBy?.employeeName || 'Unknown User';
 };
 
@@ -83,7 +83,7 @@ const Dashboard: React.FC = () => {
       try {
         const restaurantRef = getRestaurantReference(restaurantId);
         const restaurantDoc = await getDoc(restaurantRef);
-        
+
         if (restaurantDoc.exists()) {
           setRestaurantInfo(restaurantDoc.data() as RestaurantInfo);
           console.log('Restaurant info:', restaurantDoc.data());
@@ -108,7 +108,7 @@ const Dashboard: React.FC = () => {
         return data.done === false || data.done === undefined;
       });
       setStats(prev => ({ ...prev, totalPrepItems: activePrepItems.length }));
-      
+
       const prepActivitiesPromises = snapshot.docs.slice(0, 5).map(async (doc) => {
         const data = doc.data();
         let timestamp = new Date().toISOString();
@@ -121,11 +121,11 @@ const Dashboard: React.FC = () => {
             timestamp = data.createdAt;
           }
         }
-        
+
         const userName = await fetchUserData(restaurantId, data.createdBy);
-        
+
         const status: 'done' | 'pending' = data.done === true ? 'done' : 'pending';
-        
+
         return {
           id: doc.id,
           type: 'prep' as const,
@@ -135,12 +135,12 @@ const Dashboard: React.FC = () => {
           status,
         };
       });
-      
+
       const prepActivities = await Promise.all(prepActivitiesPromises);
-      
+
       setRecentActivity(prev => {
         const otherActivities = prev.filter(activity => activity.type !== 'prep');
-        return [...prepActivities, ...otherActivities].sort((a, b) => 
+        return [...prepActivities, ...otherActivities].sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         ).slice(0, 10);
       });
@@ -154,7 +154,7 @@ const Dashboard: React.FC = () => {
         return data.done === false || data.done === undefined;
       });
       setStats(prev => ({ ...prev, totalOrderItems: activeOrderItems.length }));
-      
+
       const orderActivitiesPromises = snapshot.docs.slice(0, 5).map(async (doc) => {
         const data = doc.data();
         let timestamp = new Date().toISOString();
@@ -167,11 +167,11 @@ const Dashboard: React.FC = () => {
             timestamp = data.createdAt;
           }
         }
-        
+
         const userName = await fetchUserData(restaurantId, data.createdBy);
-        
+
         const status: 'done' | 'pending' = data.done === true ? 'done' : 'pending';
-        
+
         return {
           id: doc.id,
           type: 'order' as const,
@@ -181,16 +181,16 @@ const Dashboard: React.FC = () => {
           status,
         };
       });
-      
+
       const orderActivities = await Promise.all(orderActivitiesPromises);
-      
+
       setRecentActivity(prev => {
         const otherActivities = prev.filter(activity => activity.type !== 'order');
-        return [...orderActivities, ...otherActivities].sort((a, b) => 
+        return [...orderActivities, ...otherActivities].sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         ).slice(0, 10);
       });
-      
+
       setLoading(false);
     });
     unsubscribes.push(unsubOrder);
@@ -215,11 +215,11 @@ const Dashboard: React.FC = () => {
             timestamp = data.createdAt;
           }
         }
-        
+
         const userName = await fetchUserData(restaurantId, data.createdBy);
-        
+
         const status: 'done' | 'pending' = data.done === true ? 'done' : 'pending';
-        
+
         return {
           id: doc.id,
           type: 'closing' as const,
@@ -234,7 +234,7 @@ const Dashboard: React.FC = () => {
 
       setRecentActivity(prev => {
         const otherActivities = prev.filter(activity => activity.type !== 'closing');
-        return [...closingActivities, ...otherActivities].sort((a, b) => 
+        return [...closingActivities, ...otherActivities].sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         ).slice(0, 10);
       });
@@ -255,16 +255,16 @@ const Dashboard: React.FC = () => {
             timestamp = data.createdAt;
           }
         }
-        
+
         const userName = await fetchUserData(restaurantId, data.createdBy);
-        
+
         return {
           id: doc.id,
           type: 'fridge' as const,
           title: `❄️ Fridge Log: ${data.fridgeName || data.fridge || data.action || data.name || data.description || data.item || 'Fridge activity'}`,
           timestamp,
           userName,
-          status: undefined, 
+          status: undefined,
         };
       });
 
@@ -272,7 +272,7 @@ const Dashboard: React.FC = () => {
 
       setRecentActivity(prev => {
         const otherActivities = prev.filter(activity => activity.type !== 'fridge');
-        return [...fridgeActivities, ...otherActivities].sort((a, b) => 
+        return [...fridgeActivities, ...otherActivities].sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         ).slice(0, 10);
       });
@@ -293,16 +293,16 @@ const Dashboard: React.FC = () => {
             timestamp = data.createdAt;
           }
         }
-        
+
         const userName = await fetchUserData(restaurantId, data.createdBy);
-        
+
         return {
           id: doc.id,
           type: 'delivery' as const,
           title: `🌡️ Temperature Log: ${data.supplierName || data.supplier || data.temperature || data.reading || data.value || data.name || data.description || 'Temperature reading'}`,
           timestamp,
           userName,
-          status: undefined, 
+          status: undefined,
         };
       });
 
@@ -310,7 +310,7 @@ const Dashboard: React.FC = () => {
 
       setRecentActivity(prev => {
         const otherActivities = prev.filter(activity => activity.type !== 'delivery');
-        return [...deliveryActivities, ...otherActivities].sort((a, b) => 
+        return [...deliveryActivities, ...otherActivities].sort((a, b) =>
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         ).slice(0, 10);
       });
@@ -336,17 +336,17 @@ const Dashboard: React.FC = () => {
     <Layout>
       <div>
         {restaurantInfo && (
-          <div className="mb-4" style={{ 
-            padding: '1rem', 
-            backgroundColor: 'var(--surface)', 
+          <div className="mb-4" style={{
+            padding: '1rem',
+            backgroundColor: 'var(--surface)',
             borderRadius: '0.5rem',
             border: '1px solid var(--border)',
             marginBottom: '2rem'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-              <h2 style={{ 
-                fontSize: '1.5rem', 
-                fontWeight: 'bold', 
+              <h2 style={{
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
                 margin: 0,
                 color: 'var(--primary-color)'
               }}>
@@ -370,7 +370,7 @@ const Dashboard: React.FC = () => {
         )}
 
         <h1 className="page-title">Dashboard</h1>
-        
+
         <div className="dashboard-stats">
           <div className="stat-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -382,7 +382,7 @@ const Dashboard: React.FC = () => {
               Current prep list
             </div>
           </div>
-          
+
           <div className="stat-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div style={{ fontSize: '1.5rem', color: '#10b981' }}>📝</div>
@@ -393,7 +393,7 @@ const Dashboard: React.FC = () => {
               Active orders
             </div>
           </div>
-          
+
           <div className="stat-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div style={{ fontSize: '1.5rem', color: '#f59e0b' }}>🧹</div>
@@ -401,7 +401,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="stat-value">{stats.totalClosingItems}</div>
             <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.25rem' }}>
-              Cleaning checklist
+              Closing checklist
             </div>
           </div>
         </div>
@@ -412,15 +412,15 @@ const Dashboard: React.FC = () => {
             {recentActivity.length > 0 ? (
               <div>
                 {recentActivity.map((activity) => (
-                  <div key={activity.id} className="mb-3" style={{ 
-                    padding: '0.75rem', 
-                    backgroundColor: 'var(--border-light)', 
+                  <div key={activity.id} className="mb-3" style={{
+                    padding: '0.75rem',
+                    backgroundColor: 'var(--border-light)',
                     borderRadius: '0.375rem',
                     position: 'relative'
                   }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
                       justifyContent: 'space-between',
                       marginBottom: '0.25rem'
                     }}>
@@ -457,12 +457,12 @@ const Dashboard: React.FC = () => {
 
           <div className="card">
             <h2 className="card-title">Quick Actions</h2>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-4">
               <a href="/recipes" className="btn btn-primary">
                 Manage Recipes
               </a>
-              <a href="/cleaning" className="btn btn-secondary">
-                Cleaning Checklist
+              <a href="/closing" className="btn btn-secondary">
+                Closing Checklist
               </a>
               <a href="/handovers" className="btn btn-secondary">
                 View Handovers
