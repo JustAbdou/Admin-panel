@@ -113,6 +113,13 @@ const Recipes: React.FC = () => {
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
+  // Import/Export states
+  const [exporting, setExporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<string>('');
+
   // Helper functions for drag and drop
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedImageIndex(index);
@@ -522,9 +529,152 @@ const Recipes: React.FC = () => {
     }));
   };
 
-  const filteredRecipes = selectedCategory 
+  const filteredRecipes = selectedCategory
     ? recipes.filter(recipe => recipe.category === selectedCategory)
     : recipes;
+
+  // Export recipes functionality
+  const exportRecipes = async () => {
+    if (!restaurantId) return;
+
+    try {
+      setExporting(true);
+
+      // Fetch all recipes and categories
+      const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
+      const allCategories = categoriesDoc.exists() ? categoriesDoc.data().names || [] : [];
+
+      const allRecipes: Recipe[] = [];
+
+      for (const category of allCategories) {
+        const categoryQuery = query(
+          getRecipeCategoryCollection(restaurantId, category),
+          orderBy('createdAt', 'desc')
+        );
+
+        const snapshot = await getDocs(categoryQuery);
+        const categoryRecipes = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+          } as Recipe;
+        });
+
+        allRecipes.push(...categoryRecipes);
+      }
+
+      // Create export data
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        exportVersion: "1.0",
+        restaurantId: restaurantId,
+        categories: allCategories,
+        recipes: allRecipes
+      };
+
+      // Download as JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json'
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `recipes-export-${restaurantId}-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert(`Successfully exported ${allRecipes.length} recipes!`);
+    } catch (error) {
+      console.error('Error exporting recipes:', error);
+      alert('Error exporting recipes. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Import recipes functionality
+  const importRecipes = async () => {
+    if (!restaurantId || !importFile) return;
+
+    try {
+      setImporting(true);
+      setImportProgress('Reading file...');
+
+      const fileText = await importFile.text();
+      const importData = JSON.parse(fileText);
+
+      // Validate import data structure
+      if (!importData.recipes || !Array.isArray(importData.recipes)) {
+        throw new Error('Invalid file format. Missing recipes array.');
+      }
+
+      if (!importData.categories || !Array.isArray(importData.categories)) {
+        throw new Error('Invalid file format. Missing categories array.');
+      }
+
+      setImportProgress(`Importing ${importData.recipes.length} recipes...`);
+
+      // First, update categories
+      const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
+      let existingCategories: string[] = [];
+
+      if (categoriesDoc.exists()) {
+        existingCategories = categoriesDoc.data().names || [];
+      }
+
+      // Merge new categories with existing ones
+      const allCategories = [...new Set([...existingCategories, ...importData.categories])];
+
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        names: allCategories
+      });
+
+      // Import recipes
+      let importedCount = 0;
+      let skippedCount = 0;
+
+      for (const recipe of importData.recipes) {
+        try {
+          setImportProgress(`Importing recipe ${importedCount + 1}/${importData.recipes.length}: ${recipe.recipeName}`);
+
+          // Prepare recipe data (exclude the old ID to generate new ones)
+          const recipeData = {
+            category: recipe.category,
+            image: recipe.image || [],
+            ingredients: recipe.ingredients || [],
+            instructions: recipe.instructions || [],
+            notes: recipe.notes || '',
+            recipeName: recipe.recipeName || recipe['recipe name'] || 'Imported Recipe',
+            createdAt: new Date().toISOString(),
+          };
+
+          // Add recipe to the appropriate category
+          await addDoc(getRecipeCategoryCollection(restaurantId, recipe.category), recipeData);
+          importedCount++;
+        } catch (recipeError) {
+          console.error(`Error importing recipe ${recipe.recipeName}:`, recipeError);
+          skippedCount++;
+        }
+      }
+
+      setImportProgress(`Import completed! ${importedCount} recipes imported, ${skippedCount} skipped.`);
+
+      // Refresh the page to show new recipes
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error importing recipes:', error);
+      setImportProgress(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -542,6 +692,12 @@ const Recipes: React.FC = () => {
         <div className="flex justify-between items-center mb-4">
           <h1 className="page-title">Recipes</h1>
           <div className="flex gap-2">
+            <button onClick={exportRecipes} className="btn btn-secondary" disabled={exporting}>
+              {exporting ? 'Exporting...' : 'Export Recipes'}
+            </button>
+            <button onClick={() => setShowImportModal(true)} className="btn btn-secondary">
+              Import Recipes
+            </button>
             <button onClick={openCategoryModal} className="btn btn-secondary">
               Add Category
             </button>
@@ -1142,6 +1298,99 @@ const Recipes: React.FC = () => {
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import Modal */}
+        {showImportModal && (
+          <div className="modal-overlay">
+            <div className="modal" style={{ maxWidth: '600px' }}>
+              <div className="modal-header">
+                <h2 className="modal-title">Import Recipes</h2>
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportProgress('');
+                  }}
+                  className="modal-close"
+                  disabled={importing}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 className="font-semibold text-blue-800 mb-2">📋 Import Instructions</h3>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>• Select a JSON file that was exported from another restaurant</li>
+                      <li>• New categories will be created automatically if they don't exist</li>
+                      <li>• Recipe images may not transfer (will use default images)</li>
+                      <li>• Existing recipes will not be overwritten</li>
+                    </ul>
+                  </div>
+
+                  {!importing && (
+                    <div className="form-group">
+                      <label className="form-label">Select Recipe Export File (JSON)</label>
+                      <input
+                        type="file"
+                        className="form-input"
+                        accept=".json"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setImportFile(file || null);
+                          setImportProgress('');
+                        }}
+                      />
+                      {importFile && (
+                        <div className="text-sm text-green-600 mt-2">
+                          ✓ Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {importProgress && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded">
+                      <div className="text-sm text-gray-700">{importProgress}</div>
+                      {importing && (
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '50%' }}></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <div className="flex gap-2">
+                  <button
+                    onClick={importRecipes}
+                    className="btn btn-primary"
+                    disabled={!importFile || importing}
+                  >
+                    {importing ? 'Importing...' : 'Import Recipes'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setImportFile(null);
+                      setImportProgress('');
+                    }}
+                    className="btn btn-secondary"
+                    disabled={importing}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>
