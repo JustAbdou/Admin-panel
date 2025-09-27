@@ -110,6 +110,7 @@ const Recipes: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]); // Changed from selectedFile to selectedFiles array
   const [uploading, setUploading] = useState(false);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]); // Track actual Firebase URLs separately
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
@@ -529,9 +530,22 @@ const Recipes: React.FC = () => {
     }));
   };
 
-  const filteredRecipes = selectedCategory
-    ? recipes.filter(recipe => recipe.category === selectedCategory)
-    : recipes;
+  const filteredRecipes = recipes.filter(recipe => {
+    // Filter by category if selected
+    const matchesCategory = selectedCategory ? recipe.category === selectedCategory : true;
+
+    // Filter by search term if provided
+    const matchesSearch = searchTerm.trim() === '' || (
+      recipe.recipeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      recipe.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      recipe.ingredients.some(ingredient =>
+        ingredient.toLowerCase().includes(searchTerm.toLowerCase())
+      ) ||
+      recipe.notes.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    return matchesCategory && matchesSearch;
+  });
 
   // Export recipes functionality
   const exportRecipes = async () => {
@@ -710,20 +724,96 @@ const Recipes: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-4">
-          <label className="form-label">Filter by Category:</label>
-          <select
-            className="form-input"
-            style={{ width: '200px' }}
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            <option value="">All Categories</option>
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
+        <div className="flex gap-4 mb-4">
+          <div>
+            <label className="form-label">Search Recipes:</label>
+            <div style={{ position: 'relative', width: '300px' }}>
+              <input
+                type="text"
+                className="form-input"
+                style={{ width: '100%', paddingRight: searchTerm.trim() !== '' ? '30px' : '12px' }}
+                placeholder="Search by name, ingredients, category, or allergens..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm.trim() !== '' && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: '#f3f4f6',
+                    border: '1px solid #d1d5db',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e5e7eb';
+                    e.currentTarget.style.color = '#374151';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.color = '#6b7280';
+                  }}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="form-label">Filter by Category:</label>
+            <select
+              className="form-input"
+              style={{ width: '200px' }}
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              <option value="">All Categories</option>
+              {categories.map(category => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+          {(searchTerm.trim() !== '' || selectedCategory !== '') && (
+            <div style={{ display: 'flex', alignItems: 'end' }}>
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedCategory('');
+                }}
+                className="btn btn-secondary btn-sm"
+                style={{ marginBottom: '0.125rem' }}
+              >
+                Clear Filters
+              </button>
+            </div>
+          )}
         </div>
+
+        {(searchTerm.trim() !== '' || selectedCategory !== '') && (
+          <div style={{
+            marginBottom: '1rem',
+            color: 'var(--text-secondary)',
+            fontSize: '0.9rem',
+            fontStyle: 'italic'
+          }}>
+            {filteredRecipes.length === 0 ? 'No recipes match' :
+             filteredRecipes.length === 1 ? '1 recipe matches' :
+             `${filteredRecipes.length} recipes match`} your search criteria
+          </div>
+        )}
 
         <div className="table-container">
           <table className="table">
@@ -814,7 +904,28 @@ const Recipes: React.FC = () => {
           
           {filteredRecipes.length === 0 && (
             <div className="text-center" style={{ padding: '2rem', color: 'var(--text-secondary)' }}>
-              No recipes found. Add your first recipe to get started!
+              {searchTerm.trim() !== '' || selectedCategory !== '' ? (
+                <div>
+                  <div style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>No recipes match your search criteria</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-tertiary)' }}>
+                    {searchTerm.trim() !== '' && `Searched for: "${searchTerm}"`}
+                    {searchTerm.trim() !== '' && selectedCategory !== '' && ' • '}
+                    {selectedCategory !== '' && `Category: "${selectedCategory}"`}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedCategory('');
+                    }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginTop: '1rem' }}
+                  >
+                    Clear Search
+                  </button>
+                </div>
+              ) : (
+                'No recipes found. Add your first recipe to get started!'
+              )}
             </div>
           )}
         </div>
