@@ -113,6 +113,7 @@ const Recipes: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [printingAll, setPrintingAll] = useState(false);
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
@@ -549,6 +550,462 @@ const Recipes: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
+  // Print functionality
+  const generateRecipePrintHTML = (recipe: Recipe) => {
+    const images = Array.isArray(recipe.image) ? recipe.image : (recipe.image ? [recipe.image] : []);
+    const validImages = images.filter(img => img && !img.includes('data:image/svg+xml'));
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Recipe: ${recipe.recipeName}</title>
+        <style>
+          @media print {
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              background: white;
+            }
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+            margin: 0;
+            padding: 20px;
+          }
+          .recipe-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 18px;
+            padding: 32px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .recipe-title {
+            font-size: 26px;
+            font-weight: bold;
+            color: #1a202c;
+            text-align: center;
+            margin-bottom: 16px;
+          }
+          .recipe-category {
+            text-align: center;
+            background: #f4f7ff;
+            color: #3182ce;
+            padding: 8px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            margin: 0 auto 24px;
+            display: inline-block;
+          }
+          .recipe-images {
+            text-align: center;
+            margin-bottom: 32px;
+          }
+          .recipe-image {
+            max-width: 100%;
+            width: 300px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 18px;
+            margin: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          }
+          .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1a202c;
+            margin: 24px 0 16px;
+            text-align: center;
+          }
+          .ingredient-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 16px;
+          }
+          .checkmark {
+            color: #3182ce;
+            font-size: 18px;
+            margin-right: 8px;
+            font-weight: bold;
+          }
+          .ingredient-text {
+            color: #4a5568;
+          }
+          .instruction-item {
+            display: flex;
+            align-items: flex-start;
+            background: #f4f7ff;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 16px;
+          }
+          .instruction-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 16px;
+            background: #3182ce;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            margin-right: 14px;
+            margin-top: 2px;
+            flex-shrink: 0;
+          }
+          .instruction-text {
+            font-size: 16px;
+            color: #1a202c;
+            line-height: 22px;
+            flex: 1;
+          }
+          .notes-section {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 14px;
+            padding: 16px;
+            margin-top: 16px;
+          }
+          .notes-text {
+            font-size: 16px;
+            color: #4a5568;
+            margin: 0;
+          }
+          .print-date {
+            text-align: center;
+            color: #718096;
+            font-size: 14px;
+            margin-top: 32px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 16px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="recipe-container">
+          <h1 class="recipe-title">${recipe.recipeName}</h1>
+          <div class="recipe-category">Category: ${recipe.category}</div>
+
+          ${validImages.length > 0 ? `
+            <div class="recipe-images">
+              ${validImages.map(img => `<img src="${img}" alt="Recipe image" class="recipe-image" />`).join('')}
+            </div>
+          ` : ''}
+
+          <div class="section-title">Ingredients</div>
+          ${recipe.ingredients.map(ingredient => `
+            <div class="ingredient-item">
+              <span class="checkmark">✓</span>
+              <span class="ingredient-text">${ingredient}</span>
+            </div>
+          `).join('')}
+
+
+          ${recipe.notes && recipe.notes.trim() ? `
+            <div class="section-title">Allergens & Notes</div>
+            <div class="notes-section">
+              <p class="notes-text">${recipe.notes}</p>
+            </div>
+          ` : ''}
+
+          <div class="print-date">
+            Printed on ${new Date().toLocaleDateString()} from ChefFlow Admin
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handlePrintRecipe = (recipe: Recipe) => {
+    const printHTML = generateRecipePrintHTML(recipe);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printHTML);
+      printWindow.document.close();
+
+      // Wait for images to load before printing
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      };
+    }
+  };
+
+  const handlePrintAll = async () => {
+    setPrintingAll(true);
+
+    try {
+      const printHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>All Recipes - ChefFlow</title>
+          <style>
+            @media print {
+              @page {
+                margin: 0.5in;
+                size: A4;
+              }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: white;
+              }
+              .page-break {
+                page-break-before: always;
+              }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              background: #f8fafc;
+              margin: 0;
+              padding: 20px;
+            }
+            .recipes-header {
+              text-align: center;
+              margin-bottom: 40px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #3182ce;
+            }
+            .recipes-title {
+              font-size: 32px;
+              font-weight: bold;
+              color: #3182ce;
+              margin-bottom: 8px;
+            }
+            .recipes-subtitle {
+              color: #718096;
+              font-size: 16px;
+            }
+            .recipe-container {
+              background: white;
+              border-radius: 18px;
+              padding: 32px;
+              margin-bottom: 40px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .recipe-title {
+              font-size: 26px;
+              font-weight: bold;
+              color: #1a202c;
+              text-align: center;
+              margin-bottom: 16px;
+            }
+            .recipe-category {
+              text-align: center;
+              background: #f4f7ff;
+              color: #3182ce;
+              padding: 8px 24px;
+              border-radius: 10px;
+              font-weight: 600;
+              margin: 0 auto 24px;
+              display: inline-block;
+            }
+            .recipe-images {
+              text-align: center;
+              margin-bottom: 32px;
+            }
+            .recipe-image {
+              max-width: 100%;
+              width: 300px;
+              height: 200px;
+              object-fit: cover;
+              border-radius: 18px;
+              margin: 8px;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .section-title {
+              font-size: 20px;
+              font-weight: bold;
+              color: #1a202c;
+              margin: 24px 0 16px;
+              text-align: center;
+            }
+            .ingredient-item {
+              display: flex;
+              align-items: center;
+              margin-bottom: 6px;
+              font-size: 16px;
+            }
+            .checkmark {
+              color: #3182ce;
+              font-size: 18px;
+              margin-right: 8px;
+              font-weight: bold;
+            }
+            .ingredient-text {
+              color: #4a5568;
+            }
+            .instruction-item {
+              display: flex;
+              align-items: flex-start;
+              background: #f4f7ff;
+              border-radius: 14px;
+              padding: 14px;
+              margin-bottom: 16px;
+            }
+            .instruction-number {
+              width: 32px;
+              height: 32px;
+              border-radius: 16px;
+              background: #3182ce;
+              color: white;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              font-size: 16px;
+              margin-right: 14px;
+              margin-top: 2px;
+              flex-shrink: 0;
+            }
+            .instruction-text {
+              font-size: 16px;
+              color: #1a202c;
+              line-height: 22px;
+              flex: 1;
+            }
+            .notes-section {
+              background: #fef3c7;
+              border: 1px solid #f59e0b;
+              border-radius: 14px;
+              padding: 16px;
+              margin-top: 16px;
+            }
+            .notes-text {
+              font-size: 16px;
+              color: #4a5568;
+              margin: 0;
+            }
+            .print-date {
+              text-align: center;
+              color: #718096;
+              font-size: 14px;
+              margin-top: 32px;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 16px;
+            }
+            .page-break {
+              page-break-before: always;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="recipes-header">
+            <h1 class="recipes-title">Recipe Collection</h1>
+            <p class="recipes-subtitle">Complete collection of ${filteredRecipes.length} recipes</p>
+          </div>
+
+          ${filteredRecipes.map((recipe, index) => {
+            const images = Array.isArray(recipe.image) ? recipe.image : (recipe.image ? [recipe.image] : []);
+            const validImages = images.filter(img => img && !img.includes('data:image/svg+xml'));
+
+            return `
+              <div class="recipe-container ${index > 0 ? 'page-break' : ''}">
+                <h1 class="recipe-title">${recipe.recipeName}</h1>
+                <div class="recipe-category">Category: ${recipe.category}</div>
+
+                ${validImages.length > 0 ? `
+                  <div class="recipe-images">
+                    ${validImages.slice(0, 2).map(img => `<img src="${img}" alt="Recipe image" class="recipe-image" />`).join('')}
+                  </div>
+                ` : ''}
+
+                <div class="section-title">Ingredients</div>
+                ${recipe.ingredients.map(ingredient => `
+                  <div class="ingredient-item">
+                    <span class="checkmark">✓</span>
+                    <span class="ingredient-text">${ingredient}</span>
+                  </div>
+                `).join('')}
+
+
+                ${recipe.notes && recipe.notes.trim() ? `
+                  <div class="section-title">Allergens & Notes</div>
+                  <div class="notes-section">
+                    <p class="notes-text">${recipe.notes}</p>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+
+          <div class="print-date">
+            Printed on ${new Date().toLocaleDateString()} from ChefFlow Admin
+          </div>
+        </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printHTML);
+        printWindow.document.close();
+
+        // Wait for all images to load before printing
+        printWindow.onload = () => {
+          const images = printWindow.document.querySelectorAll('img');
+          let loadedImages = 0;
+          const totalImages = images.length;
+
+          if (totalImages === 0) {
+            // No images, print immediately
+            setTimeout(() => {
+              printWindow.print();
+            }, 500);
+            return;
+          }
+
+          const checkAllImagesLoaded = () => {
+            loadedImages++;
+            if (loadedImages === totalImages) {
+              // All images loaded, print now
+              setTimeout(() => {
+                printWindow.print();
+              }, 500);
+            }
+          };
+
+          // Add load listeners to all images
+          images.forEach((img) => {
+            if (img.complete) {
+              checkAllImagesLoaded();
+            } else {
+              img.onload = checkAllImagesLoaded;
+              img.onerror = checkAllImagesLoaded; // Still proceed if image fails to load
+            }
+          });
+
+          // Fallback timeout in case some images don't trigger load events
+          setTimeout(() => {
+            printWindow.print();
+          }, 3000);
+        };
+      }
+    } catch (error) {
+      console.error('Error generating print document:', error);
+      alert('Error preparing recipes for printing. Please try again.');
+    } finally {
+      setPrintingAll(false);
+    }
+  };
+
   // Export recipes functionality
   const exportRecipes = async () => {
     if (!restaurantId) return;
@@ -714,6 +1171,9 @@ const Recipes: React.FC = () => {
             <button onClick={() => setShowImportModal(true)} className="btn btn-secondary">
               Import Recipes
             </button>
+            <button onClick={handlePrintAll} className="btn btn-secondary" disabled={printingAll}>
+              {printingAll ? 'Preparing...' : 'Print All Recipes'}
+            </button>
             <button onClick={openCategoryModal} className="btn btn-secondary">
               Add Category
             </button>
@@ -876,6 +1336,13 @@ const Recipes: React.FC = () => {
                         className="btn btn-primary btn-sm"
                       >
                         View
+                      </button>
+                      <button
+                        onClick={() => handlePrintRecipe(recipe)}
+                        className="btn btn-secondary btn-sm"
+                        title="Print Recipe"
+                      >
+                        Print
                       </button>
                       <button
                         onClick={() => handleEdit(recipe)}
