@@ -1,22 +1,73 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  query, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
+import {
+  query,
+  addDoc,
+  updateDoc,
+  deleteDoc,
   orderBy,
   getDoc,
   getDocs,
   setDoc
 } from 'firebase/firestore';
 import { useRestaurant } from '../../contexts/RestaurantContext';
-import { 
-  getRecipeCategoriesDoc, 
+import {
+  getRecipeCategoriesDoc,
   getRecipeCategoryCollection,
   getRecipeInCategoryDoc,
   uploadImageToStorage
 } from '../../utils/firestoreHelpers';
 import Layout from '../layout/Layout';
+
+// Recipe cache management
+const CACHE_KEY = 'recipes_cache';
+const CACHE_EXPIRY_KEY = 'recipes_cache_expiry';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+interface CacheData {
+  recipes: Recipe[];
+  categories: string[];
+  timestamp: number;
+}
+
+// Cache utility functions
+const getCachedData = (): CacheData | null => {
+  try {
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    const cacheExpiry = localStorage.getItem(CACHE_EXPIRY_KEY);
+
+    if (!cachedData || !cacheExpiry) return null;
+
+    const expiryTime = parseInt(cacheExpiry);
+    if (Date.now() > expiryTime) {
+      // Cache expired, clean it up
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_EXPIRY_KEY);
+      return null;
+    }
+
+    return JSON.parse(cachedData);
+  } catch (error) {
+    console.warn('Error reading cache:', error);
+    return null;
+  }
+};
+
+const setCachedData = (data: CacheData): void => {
+  try {
+    const expiryTime = Date.now() + CACHE_DURATION;
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_EXPIRY_KEY, expiryTime.toString());
+    console.log('📱 Recipes cached successfully');
+  } catch (error) {
+    console.warn('Error setting cache:', error);
+  }
+};
+
+const clearCache = (): void => {
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(CACHE_EXPIRY_KEY);
+  console.log('🧹 Recipe cache cleared');
+};
 
 // Image compression utility
 const compressImage = (file: File, maxWidth: number = 800, quality: number = 0.8): Promise<File> => {
@@ -123,6 +174,7 @@ const Recipes: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<string>('');
+  const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
 
   // Helper functions for drag and drop
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -206,8 +258,27 @@ const Recipes: React.FC = () => {
   useEffect(() => {
     if (!restaurantId) return;
 
+    const loadInitialData = async () => {
+      // Try to load from cache first
+      const cachedData = getCachedData();
+      if (cachedData && cachedData.categories.length > 0) {
+        console.log('📱 Loading categories from cache');
+        setIsLoadingFromCache(true);
+        setCategories(cachedData.categories);
+        setRecipes(cachedData.recipes);
+        setLoading(false);
+        // Show cache indicator briefly
+        setTimeout(() => setIsLoadingFromCache(false), 2000);
+        return;
+      }
+
+      // If no cache, load from Firebase
+      await loadCategories();
+    };
+
     const loadCategories = async () => {
       try {
+        console.log('🔥 Loading categories from Firebase');
         const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
         if (categoriesDoc.exists()) {
           const data = categoriesDoc.data();
@@ -221,28 +292,36 @@ const Recipes: React.FC = () => {
       }
     };
 
-    loadCategories();
+    loadInitialData();
   }, [restaurantId]);
 
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || categories.length === 0) return;
 
     const loadAllRecipes = async () => {
       try {
-        const allRecipes: Recipe[] = [];
-        
-        if (categories.length === 0) {
-          setRecipes([]);
+        // Check if we already have cached recipes that match our categories
+        const cachedData = getCachedData();
+        if (cachedData && cachedData.recipes.length > 0 &&
+            JSON.stringify(cachedData.categories.sort()) === JSON.stringify(categories.sort())) {
+          console.log('📱 Loading recipes from cache');
+          setIsLoadingFromCache(true);
+          setRecipes(cachedData.recipes);
           setLoading(false);
+          // Show cache indicator briefly
+          setTimeout(() => setIsLoadingFromCache(false), 2000);
           return;
         }
-        
+
+        console.log('🔥 Loading recipes from Firebase');
+        const allRecipes: Recipe[] = [];
+
         for (const category of categories) {
           const categoryQuery = query(
             getRecipeCategoryCollection(restaurantId, category),
             orderBy('createdAt', 'desc')
           );
-          
+
           const snapshot = await getDocs(categoryQuery);
           const categoryRecipes = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -253,18 +332,26 @@ const Recipes: React.FC = () => {
             } else if (typeof data.image === 'string' && data.image) {
               imageArray = [data.image];
             }
-            
+
             return {
               id: doc.id,
               ...data,
               image: imageArray, // Convert to array for internal use
             } as Recipe;
           });
-          
+
           allRecipes.push(...categoryRecipes);
         }
-        
+
         setRecipes(allRecipes);
+
+        // Cache the data
+        setCachedData({
+          recipes: allRecipes,
+          categories: [...categories],
+          timestamp: Date.now()
+        });
+
         setLoading(false);
       } catch (error) {
         console.error('Error loading recipes:', error);
@@ -347,7 +434,9 @@ const Recipes: React.FC = () => {
       setShowModal(false);
       setEditingRecipe(null);
       resetForm();
-      
+
+      // Clear cache since recipes have been modified
+      clearCache();
       window.location.reload();
     } catch (error: any) {
       console.error('Error saving recipe:', error);
@@ -414,6 +503,8 @@ const Recipes: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this recipe?')) {
       try {
         await deleteDoc(getRecipeInCategoryDoc(restaurantId, recipe.category, recipe.id));
+        // Clear cache since recipes have been modified
+        clearCache();
         // Reload recipes
         window.location.reload();
       } catch (error) {
@@ -455,6 +546,9 @@ const Recipes: React.FC = () => {
       setCategories(updatedCategories);
       setNewCategoryName('');
       setShowCategoryModal(false);
+
+      // Clear cache since categories have been modified
+      clearCache();
     } catch (error) {
       console.error('Error adding category:', error);
     }
@@ -480,10 +574,13 @@ const Recipes: React.FC = () => {
       });
       
       setCategories(updatedCategories);
-      
+
       if (selectedCategory === categoryToDelete) {
         setSelectedCategory('');
       }
+
+      // Clear cache since categories have been modified
+      clearCache();
       
       
     } catch (error) {
@@ -1136,6 +1233,9 @@ const Recipes: React.FC = () => {
 
       setImportProgress(`Import completed! ${importedCount} recipes imported, ${skippedCount} skipped.`);
 
+      // Clear cache since recipes have been imported
+      clearCache();
+
       // Refresh the page to show new recipes
       setTimeout(() => {
         window.location.reload();
@@ -1163,7 +1263,22 @@ const Recipes: React.FC = () => {
     <Layout>
       <div>
         <div className="flex justify-between items-center mb-4" style={{ flexDirection: 'column', gap: '1rem', alignItems: 'stretch' }}>
-          <h1 className="page-title" style={{ marginBottom: '0', textAlign: 'center' }}>Recipes</h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+            <h1 className="page-title" style={{ marginBottom: '0', textAlign: 'center' }}>Recipes</h1>
+            {isLoadingFromCache && (
+              <span style={{
+                fontSize: '0.75rem',
+                color: '#10b981',
+                backgroundColor: '#ecfdf5',
+                padding: '0.25rem 0.5rem',
+                borderRadius: '12px',
+                fontWeight: '500',
+                border: '1px solid #d1fae5'
+              }}>
+                📱 Loaded from cache
+              </span>
+            )}
+          </div>
           <div className="btn-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
             <button onClick={exportRecipes} className="btn btn-secondary" disabled={exporting}>
               {exporting ? 'Exporting...' : 'Export Recipes'}
