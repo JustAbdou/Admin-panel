@@ -96,6 +96,21 @@ nav {
   justify-content: center;
 }
 
+.nav-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.mobile-menu-btn {
+  z-index: 101;
+}
+
+.mobile-user-info {
+  display: none;
+}
+
 .nav {
   display: flex;
   gap: 0.5rem;
@@ -534,31 +549,52 @@ nav {
 }
 
 @media (max-width: 768px) {
+  .container {
+    padding: 0 0.75rem;
+  }
+
   .header-content {
-    flex-direction: column;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 0;
   }
 
-  .nav {
-    gap: 0.5rem;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
-    width: 100%;
-    overflow-x: auto;
-    padding: 0 0.5rem;
+  /* Hide main navigation on mobile */
+  nav {
+    display: none;
   }
 
-  .nav-link {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.8rem;
-    flex-shrink: 0;
+  /* Show mobile dropdown button */
+  .mobile-user-btn {
+    display: flex !important;
+  }
+
+  /* Mobile dropdown positioning */
+  .mobile-dropdown-container {
+    position: relative;
+  }
+
+  .mobile-nav-dropdown {
+    display: block !important;
+  }
+
+  .mobile-nav-dropdown.mobile-open {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
   }
 
   .user-menu {
-    order: -1;
-    width: 100%;
-    justify-content: space-between;
+    order: 3;
+    width: auto;
+    justify-content: flex-end;
+    position: relative;
+  }
+
+  /* Hide email from header on mobile */
+  .user-info {
+    display: none !important;
   }
 
   .main-content {
@@ -574,7 +610,160 @@ nav {
   }
 
   .table-container {
-    margin: 0 -1rem;
+    margin: 0 -0.75rem;
+    border-radius: 0;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Recipe page specific responsive styles */
+  .flex.gap-4 {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .flex.justify-between {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .flex.justify-between .flex {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Make buttons stack on mobile */
+  .btn-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+}
+
+/* Small mobile devices */
+@media (max-width: 480px) {
+  .container {
+    padding: 0 0.5rem;
+  }
+
+  .header-content {
+    padding: 0.5rem 0;
+  }
+
+  .logo {
+    font-size: 1.1rem;
+  }
+
+  .nav-link {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .user-info {
+    font-size: 0.75rem;
+  }
+
+  .main-content {
+    padding: 0.75rem 0;
+  }
+
+  .page-title {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .btn {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-sm {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .modal {
+    padding: 1rem;
+    width: 95%;
+  }
+
+  .modal-header {
+    margin-bottom: 1rem;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+  }
+
+  /* Make search input full width on small screens */
+  .search-container {
+    width: 100% !important;
+  }
+
+  .search-container input {
+    width: 100% !important;
+  }
+
+  /* Recipe page responsive improvements */
+  .search-filters-container .search-row {
+    flex-direction: column !important;
+  }
+
+  .search-filters-container .filter-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .btn-group {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .btn-group .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Table actions responsive */
+  .table .flex {
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+  }
+
+  .table .btn {
+    width: 100%;
+    font-size: 0.75rem;
+  }
+}
+
+/* Medium screens - tablet adjustments */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .search-filters-container .search-row {
+    flex-direction: row;
+    align-items: end;
+    gap: 1rem;
+  }
+
+  .search-container {
+    flex: 1;
+  }
+
+  .filter-row {
+    flex-wrap: wrap;
+  }
+
+  .btn-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-group .btn {
+    min-width: 120px;
   }
 }
 

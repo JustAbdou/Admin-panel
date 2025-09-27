@@ -111,6 +111,8 @@ const Recipes: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]); // Track actual Firebase URLs separately
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
@@ -703,9 +705,9 @@ const Recipes: React.FC = () => {
   return (
     <Layout>
       <div>
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="page-title">Recipes</h1>
-          <div className="flex gap-2">
+        <div className="flex justify-between items-center mb-4" style={{ flexDirection: 'column', gap: '1rem', alignItems: 'stretch' }}>
+          <h1 className="page-title" style={{ marginBottom: '0', textAlign: 'center' }}>Recipes</h1>
+          <div className="btn-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
             <button onClick={exportRecipes} className="btn btn-secondary" disabled={exporting}>
               {exporting ? 'Exporting...' : 'Export Recipes'}
             </button>
@@ -724,82 +726,85 @@ const Recipes: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex gap-4 mb-4">
-          <div>
-            <label className="form-label">Search Recipes:</label>
-            <div style={{ position: 'relative', width: '300px' }}>
-              <input
-                type="text"
-                className="form-input"
-                style={{ width: '100%', paddingRight: searchTerm.trim() !== '' ? '30px' : '12px' }}
-                placeholder="Search by name, ingredients, category, or allergens..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {searchTerm.trim() !== '' && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    backgroundColor: '#f3f4f6',
-                    border: '1px solid #d1d5db',
-                    cursor: 'pointer',
-                    color: '#6b7280',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#e5e7eb';
-                    e.currentTarget.style.color = '#374151';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f3f4f6';
-                    e.currentTarget.style.color = '#6b7280';
-                  }}
-                  title="Clear search"
+        <div className="search-filters-container" style={{ marginBottom: '1rem' }}>
+          <div className="search-row" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="search-container" style={{ width: '100%' }}>
+              <label className="form-label">Search Recipes:</label>
+              <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ width: '100%', paddingRight: searchTerm.trim() !== '' ? '30px' : '12px' }}
+                  placeholder="Search by name, ingredients, category..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm.trim() !== '' && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      backgroundColor: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      cursor: 'pointer',
+                      color: '#6b7280',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e5e7eb';
+                      e.currentTarget.style.color = '#374151';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6';
+                      e.currentTarget.style.color = '#6b7280';
+                    }}
+                    title="Clear search"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="filter-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'end' }}>
+              <div style={{ minWidth: '200px', flex: '1' }}>
+                <label className="form-label">Filter by Category:</label>
+                <select
+                  className="form-input"
+                  style={{ width: '100%' }}
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
                 >
-                  ×
-                </button>
+                  <option value="">All Categories</option>
+                  {categories.map(category => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+              {(searchTerm.trim() !== '' || selectedCategory !== '') && (
+                <div>
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedCategory('');
+                    }}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
               )}
             </div>
           </div>
-          <div>
-            <label className="form-label">Filter by Category:</label>
-            <select
-              className="form-input"
-              style={{ width: '200px' }}
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-          {(searchTerm.trim() !== '' || selectedCategory !== '') && (
-            <div style={{ display: 'flex', alignItems: 'end' }}>
-              <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedCategory('');
-                }}
-                className="btn btn-secondary btn-sm"
-                style={{ marginBottom: '0.125rem' }}
-              >
-                Clear Filters
-              </button>
-            </div>
-          )}
         </div>
 
         {(searchTerm.trim() !== '' || selectedCategory !== '') && (
@@ -822,9 +827,6 @@ const Recipes: React.FC = () => {
                 <th>Image</th>
                 <th>Name</th>
                 <th>Category</th>
-                <th>Ingredients</th>
-                <th>Instructions</th>
-                <th>Allergens</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -865,24 +867,16 @@ const Recipes: React.FC = () => {
                   <td style={{ fontWeight: '500' }}>{recipe.recipeName}</td>
                   <td>{recipe.category}</td>
                   <td>
-                    <div style={{ maxWidth: '200px', overflow: 'hidden' }}>
-                      {recipe.ingredients.slice(0, 2).join(', ')}
-                      {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length - 2} more`}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ maxWidth: '200px', overflow: 'hidden' }}>
-                      {recipe.instructions.slice(0, 1).join('')}
-                      {recipe.instructions.length > 1 && ` +${recipe.instructions.length - 1} more steps`}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {recipe.notes}
-                    </div>
-                  </td>
-                  <td>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setViewingRecipe(recipe);
+                          setShowViewModal(true);
+                        }}
+                        className="btn btn-primary btn-sm"
+                      >
+                        View
+                      </button>
                       <button
                         onClick={() => handleEdit(recipe)}
                         className="btn btn-secondary btn-sm"
@@ -1500,6 +1494,167 @@ const Recipes: React.FC = () => {
                     disabled={importing}
                   >
                     Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recipe Detail View Modal */}
+        {showViewModal && viewingRecipe && (
+          <div className="modal-overlay">
+            <div className="modal" style={{ maxWidth: '800px' }}>
+              <div className="modal-header">
+                <h2 className="modal-title">{viewingRecipe.recipeName}</h2>
+                <button
+                  onClick={() => {
+                    setShowViewModal(false);
+                    setViewingRecipe(null);
+                  }}
+                  className="modal-close"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                {/* Recipe Images */}
+                {Array.isArray(viewingRecipe.image) && viewingRecipe.image.length > 0 && !viewingRecipe.image[0].includes('data:image/svg+xml') ? (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem', fontWeight: '600' }}>Recipe Images</h3>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {viewingRecipe.image.map((imageUrl, index) => (
+                        <img
+                          key={index}
+                          src={imageUrl}
+                          alt={`${viewingRecipe.recipeName} - Image ${index + 1}`}
+                          style={{
+                            width: '120px',
+                            height: '120px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border)',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => window.open(imageUrl, '_blank')}
+                          title="Click to view full size"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : (typeof viewingRecipe.image === 'string' && viewingRecipe.image && !viewingRecipe.image.includes('data:image/svg+xml')) ? (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem', fontWeight: '600' }}>Recipe Image</h3>
+                    <img
+                      src={viewingRecipe.image}
+                      alt={viewingRecipe.recipeName}
+                      style={{
+                        width: '200px',
+                        height: '200px',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => window.open(viewingRecipe.image as string, '_blank')}
+                      title="Click to view full size"
+                    />
+                  </div>
+                ) : null}
+
+                {/* Category */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ marginBottom: '0.5rem', fontSize: '1.1rem', fontWeight: '600' }}>Category</h3>
+                  <span style={{
+                    backgroundColor: 'var(--primary)',
+                    color: 'white',
+                    padding: '0.25rem 0.75rem',
+                    borderRadius: '12px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}>
+                    {viewingRecipe.category}
+                  </span>
+                </div>
+
+                {/* Ingredients */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem', fontWeight: '600' }}>
+                    Ingredients ({viewingRecipe.ingredients.length})
+                  </h3>
+                  <ul style={{ paddingLeft: '1.25rem', lineHeight: '1.6' }}>
+                    {viewingRecipe.ingredients.map((ingredient, index) => (
+                      <li key={index} style={{ marginBottom: '0.25rem' }}>
+                        {ingredient}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Instructions */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem', fontWeight: '600' }}>
+                    Instructions ({viewingRecipe.instructions.length} steps)
+                  </h3>
+                  <ol style={{ paddingLeft: '1.25rem', lineHeight: '1.6' }}>
+                    {viewingRecipe.instructions.map((instruction, index) => (
+                      <li key={index} style={{ marginBottom: '0.75rem', paddingLeft: '0.25rem' }}>
+                        <strong>Step {index + 1}:</strong> {instruction}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Allergens/Notes */}
+                {viewingRecipe.notes && viewingRecipe.notes.trim() !== '' && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <h3 style={{ marginBottom: '0.75rem', fontSize: '1.1rem', fontWeight: '600' }}>Allergens & Notes</h3>
+                    <div style={{
+                      backgroundColor: '#fef3c7',
+                      border: '1px solid #f59e0b',
+                      borderRadius: '8px',
+                      padding: '0.75rem',
+                      lineHeight: '1.5'
+                    }}>
+                      {viewingRecipe.notes}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recipe Metadata */}
+                <div style={{
+                  marginTop: '1.5rem',
+                  paddingTop: '1rem',
+                  borderTop: '1px solid var(--border)',
+                  fontSize: '0.875rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  <p><strong>Created:</strong> {new Date(viewingRecipe.createdAt).toLocaleDateString()}</p>
+                  <p><strong>Recipe ID:</strong> {viewingRecipe.id}</p>
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      setViewingRecipe(null);
+                      handleEdit(viewingRecipe);
+                    }}
+                    className="btn btn-secondary"
+                  >
+                    Edit Recipe
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      setViewingRecipe(null);
+                    }}
+                    className="btn btn-primary"
+                  >
+                    Close
                   </button>
                 </div>
               </div>
