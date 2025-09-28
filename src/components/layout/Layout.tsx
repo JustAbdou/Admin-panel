@@ -164,9 +164,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   boxShadow: 'var(--shadow-lg)',
                   minWidth: '200px',
                   zIndex: 99999,
-                  display: 'none',
-                  opacity: 0,
-                  transform: 'translateY(-10px)',
+                  display: isMobileMenuOpen ? 'block' : 'none',
+                  opacity: isMobileMenuOpen ? 1 : 0,
+                  transform: isMobileMenuOpen ? 'translateY(0)' : 'translateY(-10px)',
+                  pointerEvents: isMobileMenuOpen ? 'auto' : 'none',
                   transition: 'all 0.3s ease'
                 }}>
                   <div style={{

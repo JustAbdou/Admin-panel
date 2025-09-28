@@ -563,7 +563,9 @@ nav {
 
   /* Hide main navigation on mobile */
   nav {
-    display: none;
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
   }
 
   /* Show mobile dropdown button */
@@ -574,16 +576,22 @@ nav {
   /* Mobile dropdown positioning */
   .mobile-dropdown-container {
     position: relative;
+    pointer-events: auto;
   }
 
   .mobile-nav-dropdown {
-    display: block !important;
+    display: none !important;
+    opacity: 0 !important;
+    transform: translateY(-10px) !important;
+    pointer-events: none !important;
     z-index: 99999 !important;
   }
 
   .mobile-nav-dropdown.mobile-open {
+    display: block !important;
     opacity: 1 !important;
     transform: translateY(0) !important;
+    pointer-events: auto !important;
     z-index: 99999 !important;
   }
 
