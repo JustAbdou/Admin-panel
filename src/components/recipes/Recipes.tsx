@@ -1279,7 +1279,7 @@ const Recipes: React.FC = () => {
               </span>
             )}
           </div>
-          <div className="btn-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center' }}>
+          <div className="btn-group" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', maxWidth: '100%', overflow: 'hidden' }}>
             <button onClick={exportRecipes} className="btn btn-secondary" disabled={exporting}>
               {exporting ? 'Exporting...' : 'Export Recipes'}
             </button>
