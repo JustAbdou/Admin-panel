@@ -114,11 +114,11 @@ const Dashboard: React.FC = () => {
     const unsubPrep = onSnapshot(prepQuery, async (snapshot) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const todayPrepItems = snapshot.docs.filter(doc => {
         const data = doc.data();
         let itemDate = new Date();
-        
+
         if (data.createdAt) {
           if (data.createdAt.toDate) {
             itemDate = data.createdAt.toDate();
@@ -128,27 +128,27 @@ const Dashboard: React.FC = () => {
             itemDate = new Date(data.createdAt);
           }
         }
-        
+
         itemDate.setHours(0, 0, 0, 0);
         return itemDate.getTime() === today.getTime();
       });
-      
+
       const completedTodayPrepItems = todayPrepItems.filter(doc => {
         const data = doc.data();
         return data.done === true;
       });
-      
+
       const activePrepItems = snapshot.docs.filter(doc => {
         const data = doc.data();
         return data.done === false || data.done === undefined;
       });
-      
-      const progressPercentage = todayPrepItems.length > 0 
+
+      const progressPercentage = todayPrepItems.length > 0
         ? Math.round((completedTodayPrepItems.length / todayPrepItems.length) * 100)
         : 0;
-      
-      setStats(prev => ({ 
-        ...prev, 
+
+      setStats(prev => ({
+        ...prev,
         totalPrepItems: activePrepItems.length,
         completedPrepItems: completedTodayPrepItems.length,
         totalTodayPrepItems: todayPrepItems.length,
@@ -204,11 +204,11 @@ const Dashboard: React.FC = () => {
         const data = doc.data();
         return data.done === true; // Count completed items
       });
-      
+
       const isChecklistComplete = allClosingItems.length > 0 && activeClosingItems.length === 0;
-      
-      setStats(prev => ({ 
-        ...prev, 
+
+      setStats(prev => ({
+        ...prev,
         totalClosingItems: activeClosingItems.length,
         completedClosingItems: completedClosingItems.length,
         closingChecklistComplete: isChecklistComplete
@@ -258,15 +258,15 @@ const Dashboard: React.FC = () => {
     const unsubFridge = onSnapshot(fridgeQuery, async (snapshot) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       // Check for fridges with temperature readings entered today
       const fridgesWithTemperatureReadings = snapshot.docs.filter(doc => {
         const data = doc.data();
-        
+
         // Check if this fridge has temperature readings
-        const hasTemperatureReading = (data.temperatureAM && data.temperatureAM.toString().trim() !== '') || 
-                                     (data.temperaturePM && data.temperaturePM.toString().trim() !== '');
-        
+        const hasTemperatureReading = (data.temperatureAM && data.temperatureAM.toString().trim() !== '') ||
+          (data.temperaturePM && data.temperaturePM.toString().trim() !== '');
+
         // Check if the fridge log was created/updated today using createdAt timestamp
         let isToday = false;
         if (data.createdAt) {
@@ -281,18 +281,18 @@ const Dashboard: React.FC = () => {
           entryDate.setHours(0, 0, 0, 0);
           isToday = entryDate.getTime() === today.getTime();
         }
-        
+
         // Only consider it a "today entry" if it has temperature readings AND is from today
         return hasTemperatureReading && isToday;
       });
-      
+
       // Consider it "done" if there are temperature readings from today
       const todayFridgeEntries = fridgesWithTemperatureReadings;
-      
+
       const hasTemperatureEntry = todayFridgeEntries.length > 0;
-      
-      setStats(prev => ({ 
-        ...prev, 
+
+      setStats(prev => ({
+        ...prev,
         ehoTemperatureEntered: hasTemperatureEntry
       }));
 
@@ -408,7 +408,6 @@ const Dashboard: React.FC = () => {
               <RestaurantSwitcher compact />
             </div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Restaurant ID: {restaurantId}
               {restaurantInfo.address && (
                 <div>📍 {restaurantInfo.address}</div>
               )}
@@ -430,12 +429,12 @@ const Dashboard: React.FC = () => {
               <div style={{ fontSize: '1.5rem', color: '#3b82f6' }}>📋</div>
               <div className="stat-label">Today's Prep Progress</div>
             </div>
-            
+
             {/* Circular Progress Indicator */}
-            <div style={{ 
-              position: 'relative', 
-              width: '80px', 
-              height: '80px', 
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
               margin: '0 auto 1rem',
               display: 'flex',
               alignItems: 'center',
@@ -474,7 +473,7 @@ const Dashboard: React.FC = () => {
                 {stats.prepProgressPercentage}%
               </div>
             </div>
-            
+
             <div style={{ fontSize: '0.875rem', opacity: 0.8, textAlign: 'center' }}>
               {stats.completedPrepItems} of {stats.totalTodayPrepItems} completed today
             </div>
@@ -485,20 +484,20 @@ const Dashboard: React.FC = () => {
               <div style={{ fontSize: '1.5rem', color: '#f59e0b' }}>🧹</div>
               <div className="stat-label">Closing Checklist</div>
             </div>
-            
+
             {/* Centered Icon */}
-            <div style={{ 
-              position: 'relative', 
-              width: '80px', 
-              height: '80px', 
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
               margin: '0 auto 1rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
               {stats.closingChecklistComplete ? (
-                <div style={{ 
-                  fontSize: '2.5rem', 
+                <div style={{
+                  fontSize: '2.5rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -511,8 +510,8 @@ const Dashboard: React.FC = () => {
                   ✓
                 </div>
               ) : (
-                <div style={{ 
-                  fontSize: '2.5rem', 
+                <div style={{
+                  fontSize: '2.5rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -526,7 +525,7 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div style={{ fontSize: '0.875rem', opacity: 0.8, textAlign: 'center' }}>
               {stats.closingChecklistComplete ? 'All tasks completed!' : 'Tasks pending'}
             </div>
@@ -537,20 +536,20 @@ const Dashboard: React.FC = () => {
               <div style={{ fontSize: '1.5rem', color: '#8b5cf6' }}>🌡️</div>
               <div className="stat-label">EHO</div>
             </div>
-            
+
             {/* Centered Icon */}
-            <div style={{ 
-              position: 'relative', 
-              width: '80px', 
-              height: '80px', 
+            <div style={{
+              position: 'relative',
+              width: '80px',
+              height: '80px',
               margin: '0 auto 1rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
               {stats.ehoTemperatureEntered ? (
-                <div style={{ 
-                  fontSize: '2.5rem', 
+                <div style={{
+                  fontSize: '2.5rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -563,8 +562,8 @@ const Dashboard: React.FC = () => {
                   ✓
                 </div>
               ) : (
-                <div style={{ 
-                  fontSize: '2.5rem', 
+                <div style={{
+                  fontSize: '2.5rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -578,7 +577,7 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div style={{ fontSize: '0.875rem', opacity: 0.8, textAlign: 'center' }}>
               {stats.ehoTemperatureEntered ? 'Temperatures logged' : 'No temperatures logged'}
             </div>
