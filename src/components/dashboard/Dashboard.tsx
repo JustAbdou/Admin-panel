@@ -396,7 +396,7 @@ const Dashboard: React.FC = () => {
             border: '1px solid var(--border)',
             marginBottom: '2rem'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }} className="restaurant-header">
               <h2 style={{
                 fontSize: '1.5rem',
                 fontWeight: 'bold',
@@ -405,7 +405,9 @@ const Dashboard: React.FC = () => {
               }}>
                 {restaurantInfo.name}
               </h2>
-              <RestaurantSwitcher compact />
+              <div className="restaurant-switcher-container">
+                <RestaurantSwitcher compact />
+              </div>
             </div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
               {restaurantInfo.address && (

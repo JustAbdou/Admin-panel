@@ -105,6 +105,22 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
               </div>
 
+              {/* Mobile backdrop */}
+              {isMobileMenuOpen && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                    zIndex: 9998
+                  }}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+              )}
+
               {/* Mobile dropdown positioned next to sign-out button */}
               <div className="mobile-dropdown-container">
                 <button
@@ -130,10 +146,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   }}
                   title="Menu"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="1"/>
-                    <circle cx="12" cy="5" r="1"/>
-                    <circle cx="12" cy="19" r="1"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
                   </svg>
                 </button>
 
@@ -147,7 +163,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   borderRadius: '0.5rem',
                   boxShadow: 'var(--shadow-lg)',
                   minWidth: '200px',
-                  zIndex: 1000,
+                  zIndex: 99999,
                   display: 'none',
                   opacity: 0,
                   transform: 'translateY(-10px)',
