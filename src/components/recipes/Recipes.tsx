@@ -19,19 +19,21 @@ import {
 import Layout from '../layout/Layout';
 
 // Recipe cache management
-const CACHE_KEY = 'recipes_cache';
-const CACHE_EXPIRY_KEY = 'recipes_cache_expiry';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 interface CacheData {
   recipes: Recipe[];
   categories: string[];
   timestamp: number;
+  restaurantId: string; // Add restaurantId to cache
 }
 
 // Cache utility functions
-const getCachedData = (): CacheData | null => {
+const getCachedData = (restaurantId: string): CacheData | null => {
   try {
+    const CACHE_KEY = `recipes_cache_${restaurantId}`;
+    const CACHE_EXPIRY_KEY = `recipes_cache_expiry_${restaurantId}`;
+
     const cachedData = localStorage.getItem(CACHE_KEY);
     const cacheExpiry = localStorage.getItem(CACHE_EXPIRY_KEY);
 
@@ -45,28 +47,41 @@ const getCachedData = (): CacheData | null => {
       return null;
     }
 
-    return JSON.parse(cachedData);
+    const parsedData = JSON.parse(cachedData);
+
+    // Verify the cache is for the correct restaurant
+    if (parsedData.restaurantId !== restaurantId) {
+      return null;
+    }
+
+    return parsedData;
   } catch (error) {
     console.warn('Error reading cache:', error);
     return null;
   }
 };
 
-const setCachedData = (data: CacheData): void => {
+const setCachedData = (data: CacheData, restaurantId: string): void => {
   try {
+    const CACHE_KEY = `recipes_cache_${restaurantId}`;
+    const CACHE_EXPIRY_KEY = `recipes_cache_expiry_${restaurantId}`;
+
     const expiryTime = Date.now() + CACHE_DURATION;
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
     localStorage.setItem(CACHE_EXPIRY_KEY, expiryTime.toString());
-    console.log('📱 Recipes cached successfully');
+    console.log(`📱 Recipes cached successfully for restaurant: ${restaurantId}`);
   } catch (error) {
     console.warn('Error setting cache:', error);
   }
 };
 
-const clearCache = (): void => {
+const clearCache = (restaurantId: string): void => {
+  const CACHE_KEY = `recipes_cache_${restaurantId}`;
+  const CACHE_EXPIRY_KEY = `recipes_cache_expiry_${restaurantId}`;
+
   localStorage.removeItem(CACHE_KEY);
   localStorage.removeItem(CACHE_EXPIRY_KEY);
-  console.log('🧹 Recipe cache cleared');
+  console.log(`🧹 Recipe cache cleared for restaurant: ${restaurantId}`);
 };
 
 // Image compression utility
@@ -140,7 +155,7 @@ interface RecipeFormData {
 }
 
 const Recipes: React.FC = () => {
-  const { restaurantId } = useRestaurant();
+  const { restaurantId, availableRestaurants } = useRestaurant();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,6 +190,9 @@ const Recipes: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<string>('');
   const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
+
+  // Copy to venues state
+  const [selectedRestaurantIds, setSelectedRestaurantIds] = useState<string[]>([]);
 
   // Helper functions for drag and drop
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -260,9 +278,9 @@ const Recipes: React.FC = () => {
 
     const loadInitialData = async () => {
       // Try to load from cache first
-      const cachedData = getCachedData();
+      const cachedData = getCachedData(restaurantId);
       if (cachedData && cachedData.categories.length > 0) {
-        console.log('📱 Loading categories from cache');
+        console.log(`📱 Loading categories from cache for restaurant: ${restaurantId}`);
         setIsLoadingFromCache(true);
         setCategories(cachedData.categories);
         setRecipes(cachedData.recipes);
@@ -278,7 +296,7 @@ const Recipes: React.FC = () => {
 
     const loadCategories = async () => {
       try {
-        console.log('🔥 Loading categories from Firebase');
+        console.log(`🔥 Loading categories from Firebase for restaurant: ${restaurantId}`);
         const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
         if (categoriesDoc.exists()) {
           const data = categoriesDoc.data();
@@ -301,10 +319,10 @@ const Recipes: React.FC = () => {
     const loadAllRecipes = async () => {
       try {
         // Check if we already have cached recipes that match our categories
-        const cachedData = getCachedData();
+        const cachedData = getCachedData(restaurantId);
         if (cachedData && cachedData.recipes.length > 0 &&
             JSON.stringify(cachedData.categories.sort()) === JSON.stringify(categories.sort())) {
-          console.log('📱 Loading recipes from cache');
+          console.log(`📱 Loading recipes from cache for restaurant: ${restaurantId}`);
           setIsLoadingFromCache(true);
           setRecipes(cachedData.recipes);
           setLoading(false);
@@ -313,7 +331,7 @@ const Recipes: React.FC = () => {
           return;
         }
 
-        console.log('🔥 Loading recipes from Firebase');
+        console.log(`🔥 Loading recipes from Firebase for restaurant: ${restaurantId}`);
         const allRecipes: Recipe[] = [];
 
         for (const category of categories) {
@@ -345,12 +363,13 @@ const Recipes: React.FC = () => {
 
         setRecipes(allRecipes);
 
-        // Cache the data
+        // Cache the data with restaurantId
         setCachedData({
           recipes: allRecipes,
           categories: [...categories],
-          timestamp: Date.now()
-        });
+          timestamp: Date.now(),
+          restaurantId: restaurantId
+        }, restaurantId);
 
         setLoading(false);
       } catch (error) {
@@ -368,14 +387,14 @@ const Recipes: React.FC = () => {
 
     try {
       setUploading(true);
-      
+
       // Start with existing Firebase URLs (for editing)
       let finalImageUrls: string[] = [...existingImageUrls];
 
       // Upload new files with compression and add their URLs
       if (selectedFiles.length > 0) {
         console.log('Compressing and uploading images...');
-        
+
         // Compress all images first
         const compressionPromises = selectedFiles.map(async (file) => {
           try {
@@ -387,15 +406,15 @@ const Recipes: React.FC = () => {
             return file; // Fallback to original file if compression fails
           }
         });
-        
+
         const compressedFiles = await Promise.all(compressionPromises);
-        
+
         // Upload compressed files
-        const uploadPromises = compressedFiles.map(file => 
+        const uploadPromises = compressedFiles.map(file =>
           uploadImageToStorage(file, restaurantId, 'recipes')
         );
         const newImageUrls = await Promise.all(uploadPromises);
-        
+
         // Add new uploaded URLs to existing ones (up to 5 total)
         finalImageUrls = [...finalImageUrls, ...newImageUrls].slice(0, 8);
       }
@@ -413,7 +432,9 @@ const Recipes: React.FC = () => {
         notes: formData.notes,
         recipeName: formData.recipeName,
         createdAt: new Date().toISOString(),
-      };      if (editingRecipe) {
+      };
+
+      if (editingRecipe) {
         // If category changed, we need to delete from old category and create in new category
         if (editingRecipe.category !== formData.category) {
           // Delete from old category
@@ -423,20 +444,58 @@ const Recipes: React.FC = () => {
         } else {
           // Update in same category
           await updateDoc(
-            getRecipeInCategoryDoc(restaurantId, formData.category, editingRecipe.id), 
+            getRecipeInCategoryDoc(restaurantId, formData.category, editingRecipe.id),
             recipeData
           );
         }
       } else {
+        // Add to current restaurant
         await addDoc(getRecipeCategoryCollection(restaurantId, formData.category), recipeData);
+      }
+
+      // Copy to selected additional restaurants (if any selected)
+      if (selectedRestaurantIds.length > 0) {
+        for (const targetRestaurantId of selectedRestaurantIds) {
+          // Skip the current restaurant (already saved above)
+          if (targetRestaurantId === restaurantId) continue;
+
+          try {
+            // Ensure the target restaurant has the category
+            const targetCategoriesDoc = await getDoc(getRecipeCategoriesDoc(targetRestaurantId));
+            let targetCategories: string[] = [];
+
+            if (targetCategoriesDoc.exists()) {
+              targetCategories = targetCategoriesDoc.data().names || [];
+            }
+
+            // Add category if it doesn't exist in target restaurant
+            if (!targetCategories.includes(formData.category)) {
+              targetCategories.push(formData.category);
+              await setDoc(getRecipeCategoriesDoc(targetRestaurantId), {
+                names: targetCategories
+              });
+            }
+
+            // Add recipe to target restaurant
+            await addDoc(getRecipeCategoryCollection(targetRestaurantId, formData.category), recipeData);
+          } catch (error) {
+            console.error(`Error copying recipe to ${targetRestaurantId}:`, error);
+          }
+        }
       }
 
       setShowModal(false);
       setEditingRecipe(null);
       resetForm();
 
-      // Clear cache since recipes have been modified
-      clearCache();
+      // Clear cache for all affected restaurants
+      clearCache(restaurantId);
+      selectedRestaurantIds.forEach(id => {
+        if (id !== restaurantId) {
+          clearCache(id);
+        }
+      });
+
       window.location.reload();
     } catch (error: any) {
       console.error('Error saving recipe:', error);
@@ -461,10 +520,11 @@ const Recipes: React.FC = () => {
       notes: '',
       recipeName: '',
     });
-    
+
     setSelectedFiles([]); // Changed from setSelectedFile(null) to setSelectedFiles([])
     setExistingImageUrls([]); // Reset existing image URLs
-    
+    setSelectedRestaurantIds([]); // Reset selected restaurant IDs
+
     const fileInputs = document.querySelectorAll('input[type="file"]') as NodeListOf<HTMLInputElement>;
     fileInputs.forEach(fileInput => {
       fileInput.value = '';
@@ -504,7 +564,7 @@ const Recipes: React.FC = () => {
       try {
         await deleteDoc(getRecipeInCategoryDoc(restaurantId, recipe.category, recipe.id));
         // Clear cache since recipes have been modified
-        clearCache();
+        clearCache(restaurantId);
         // Reload recipes
         window.location.reload();
       } catch (error) {
@@ -548,7 +608,7 @@ const Recipes: React.FC = () => {
       setShowCategoryModal(false);
 
       // Clear cache since categories have been modified
-      clearCache();
+      clearCache(restaurantId);
     } catch (error) {
       console.error('Error adding category:', error);
     }
@@ -580,7 +640,7 @@ const Recipes: React.FC = () => {
       }
 
       // Clear cache since categories have been modified
-      clearCache();
+      clearCache(restaurantId);
       
       
     } catch (error) {
@@ -1234,7 +1294,7 @@ const Recipes: React.FC = () => {
       setImportProgress(`Import completed! ${importedCount} recipes imported, ${skippedCount} skipped.`);
 
       // Clear cache since recipes have been imported
-      clearCache();
+      clearCache(restaurantId);
 
       // Refresh the page to show new recipes
       setTimeout(() => {
@@ -1547,6 +1607,89 @@ const Recipes: React.FC = () => {
                     ))}
                   </select>
                 </div>
+
+                {/* Copy to Additional Venues */}
+                {availableRestaurants.length > 1 && (
+                  <div className="form-group">
+                    <label className="form-label" style={{ marginBottom: '0.5rem' }}>
+                      Copy Recipe to Additional Venues (Optional)
+                    </label>
+                    <div style={{
+                      fontSize: '0.875rem',
+                      color: 'var(--text-secondary)',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Select venues where you want to copy this recipe. Recipe will always be saved to the current venue.
+                    </div>
+                    <div style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      padding: '0.75rem',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      backgroundColor: '#f9fafb'
+                    }}>
+                      {availableRestaurants
+                        .filter(restaurant => restaurant.id !== restaurantId) // Exclude current restaurant
+                        .map(restaurant => (
+                          <label
+                            key={restaurant.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '0.5rem',
+                              cursor: 'pointer',
+                              borderRadius: '6px',
+                              transition: 'background-color 0.2s',
+                              marginBottom: '0.25rem'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f3f4f6';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedRestaurantIds.includes(restaurant.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRestaurantIds(prev => [...prev, restaurant.id]);
+                                } else {
+                                  setSelectedRestaurantIds(prev =>
+                                    prev.filter(id => id !== restaurant.id)
+                                  );
+                                }
+                              }}
+                              style={{
+                                marginRight: '0.5rem',
+                                cursor: 'pointer',
+                                width: '16px',
+                                height: '16px'
+                              }}
+                            />
+                            <span style={{ fontSize: '0.95rem' }}>
+                              {restaurant.name}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                    {selectedRestaurantIds.length > 0 && (
+                      <div style={{
+                        marginTop: '0.5rem',
+                        padding: '0.5rem',
+                        backgroundColor: '#ecfdf5',
+                        border: '1px solid #10b981',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        color: '#065f46'
+                      }}>
+                        ✓ Recipe will be copied to {selectedRestaurantIds.length} additional venue{selectedRestaurantIds.length > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">
