@@ -304,9 +304,12 @@ const Recipes: React.FC = () => {
         } else {
           setCategories([]);
         }
+        // Set loading to false even if no categories exist
+        setLoading(false);
       } catch (error) {
         console.error('Error loading categories:', error);
         setCategories([]);
+        setLoading(false);
       }
     };
 
@@ -314,7 +317,13 @@ const Recipes: React.FC = () => {
   }, [restaurantId]);
 
   useEffect(() => {
-    if (!restaurantId || categories.length === 0) return;
+    if (!restaurantId) return;
+
+    // If no categories, just set empty recipes and we're done
+    if (categories.length === 0) {
+      setRecipes([]);
+      return;
+    }
 
     const loadAllRecipes = async () => {
       try {

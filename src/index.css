@@ -104,6 +104,7 @@ button:focus-visible {
   font-weight: 500;
   min-width: 240px;
   max-width: 280px;
+  min-height: 72px;
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
@@ -371,49 +372,66 @@ button:focus-visible {
     min-width: 240px;
     padding: 0.625rem 1rem;
   }
-  
+
   .fab-primary-text {
     font-size: 0.9rem;
   }
-  
+
   .fab-secondary-text {
     font-size: 0.75rem;
   }
-  
+
   .fab-dropdown {
     left: -12px;
     right: -12px;
     margin-top: 8px;
   }
-  
+
   .fab-dropdown-header {
     padding: 1.25rem 1.25rem 0.75rem;
   }
-  
+
   .fab-dropdown-header h3 {
     font-size: 1.1rem;
   }
-  
+
   .fab-option {
     padding: 0.875rem 1rem;
   }
-  
+
   .fab-option-icon {
     width: 40px;
     height: 40px;
   }
-  
+
   .fab-option-name {
     font-size: 0.9rem;
+  }
+
+  /* Join Restaurant Button responsive */
+  .join-restaurant-btn {
+    min-width: 160px;
+    max-width: 200px;
+    padding: 0.625rem 1rem;
+  }
+
+  .join-restaurant-btn .btn-text {
+    font-size: 0.875rem;
+  }
+
+  .join-restaurant-btn .btn-icon {
+    width: 36px;
+    height: 36px;
   }
 }
 
 @media (max-width: 480px) {
   .restaurant-fab {
-    min-width: 200px;
+    min-width: 140px;
+    max-width: 180px;
     padding: 0.5rem 0.875rem;
   }
-  
+
   .fab-icon {
     width: 32px;
     height: 32px;
@@ -434,6 +452,28 @@ button:focus-visible {
     width: 14px;
     height: 14px;
   }
+
+  /* Join Restaurant Button responsive for small screens */
+  .join-restaurant-btn {
+    min-width: 140px;
+    max-width: 180px;
+    padding: 0.5rem 0.875rem;
+    gap: 0.625rem;
+  }
+
+  .join-restaurant-btn .btn-text {
+    font-size: 0.8rem;
+  }
+
+  .join-restaurant-btn .btn-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .join-restaurant-btn .btn-icon svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* Compact FAB for restaurant info block */
@@ -445,6 +485,7 @@ button:focus-visible {
   min-width: 200px;
   max-width: 240px;
   padding: 0.5rem 1rem;
+  min-height: 60px;
 }
 
 .restaurant-fab-switcher.compact .fab-icon {
@@ -462,6 +503,78 @@ button:focus-visible {
 
 .restaurant-fab-switcher.compact .fab-dropdown {
   top: calc(100% + 8px);
+}
+
+/* Restaurant Switcher Container - responsive wrapper */
+.restaurant-switcher-container {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Join Restaurant Button - matches restaurant-fab styling */
+.join-restaurant-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
+  color: white;
+  font-weight: 500;
+  min-width: 240px;
+  max-width: 280px;
+  min-height: 72px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.join-restaurant-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 16px 48px rgba(16, 185, 129, 0.4);
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+.join-restaurant-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.join-restaurant-btn .btn-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.join-restaurant-btn .btn-text {
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+/* Compact version to match restaurant switcher compact */
+.join-restaurant-btn.compact {
+  min-width: 200px;
+  max-width: 240px;
+  padding: 0.5rem 1rem;
+  min-height: 60px;
+}
+
+.join-restaurant-btn.compact .btn-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.join-restaurant-btn.compact .btn-text {
+  font-size: 0.9rem;
 }
 
 /* Modern FAB Restaurant Switcher */

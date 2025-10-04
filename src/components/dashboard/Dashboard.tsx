@@ -12,6 +12,7 @@ import {
 import { db } from '../../firebase';
 import Layout from '../layout/Layout';
 import RestaurantSwitcher from '../layout/RestaurantSwitcher';
+import JoinRestaurantButton from '../layout/JoinRestaurantButton';
 
 interface DashboardStats {
   totalPrepItems: number;
@@ -406,6 +407,7 @@ const Dashboard: React.FC = () => {
                 {restaurantInfo.name}
               </h2>
               <div className="restaurant-switcher-container">
+                <JoinRestaurantButton />
                 <RestaurantSwitcher compact />
               </div>
             </div>
