@@ -1612,7 +1612,7 @@ const Recipes: React.FC = () => {
                 {availableRestaurants.length > 1 && (
                   <div className="form-group">
                     <label className="form-label" style={{ marginBottom: '0.5rem' }}>
-                      Copy Recipe to Additional Venues (Optional)
+                      Copy Recipe to Other Venues (Optional)
                     </label>
                     <div style={{
                       fontSize: '0.875rem',
