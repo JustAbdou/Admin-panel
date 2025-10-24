@@ -865,7 +865,7 @@ const Recipes: React.FC = () => {
 
           ${validImages.length > 0 ? `
             <div class="recipe-images">
-              ${validImages.map(img => `<img src="${img}" alt="Recipe image" class="recipe-image" />`).join('')}
+              <img src="${validImages[0]}" alt="Recipe image" class="recipe-image" />
             </div>
           ` : ''}
 
@@ -1089,7 +1089,7 @@ const Recipes: React.FC = () => {
 
                 ${validImages.length > 0 ? `
                   <div class="recipe-images">
-                    ${validImages.slice(0, 2).map(img => `<img src="${img}" alt="Recipe image" class="recipe-image" />`).join('')}
+                    <img src="${validImages[0]}" alt="Recipe image" class="recipe-image" />
                   </div>
                 ` : ''}
 
