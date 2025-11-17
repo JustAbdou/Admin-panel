@@ -1,4 +1,4 @@
-import { collection, doc, CollectionReference, DocumentReference, getDoc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, CollectionReference, DocumentReference, getDoc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -233,6 +233,25 @@ export const createFridgeLogDocument = async (
     done: false,
     createdBy,
     restaurantId
+  });
+};
+
+// Update fridge temperature with timestamp
+export const updateFridgeTemperature = async (
+  restaurantId: string,
+  fridgeName: string,
+  temperatureAM: string,
+  temperaturePM: string,
+  updatedBy: string
+): Promise<void> => {
+  const fridgeLogsCollection = getFridgeLogsCollection(restaurantId);
+  const docRef = doc(fridgeLogsCollection, fridgeName);
+  
+  await updateDoc(docRef, {
+    temperatureAM,
+    temperaturePM,
+    lastTemperatureUpdate: new Date(),
+    updatedBy
   });
 };
 

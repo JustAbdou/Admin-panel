@@ -182,6 +182,9 @@ const Recipes: React.FC = () => {
   const [printingAll, setPrintingAll] = useState(false);
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
+  const [draggedCategoryIndex, setDraggedCategoryIndex] = useState<number | null>(null);
+  const [editingCategoryIndex, setEditingCategoryIndex] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState<string>('');
 
   // Import/Export states
   const [exporting, setExporting] = useState(false);
@@ -330,7 +333,7 @@ const Recipes: React.FC = () => {
         // Check if we already have cached recipes that match our categories
         const cachedData = getCachedData(restaurantId);
         if (cachedData && cachedData.recipes.length > 0 &&
-            JSON.stringify(cachedData.categories.sort()) === JSON.stringify(categories.sort())) {
+            JSON.stringify(cachedData.categories) === JSON.stringify(categories)) {
           console.log(`📱 Loading recipes from cache for restaurant: ${restaurantId}`);
           setIsLoadingFromCache(true);
           setRecipes(cachedData.recipes);
@@ -485,8 +488,64 @@ const Recipes: React.FC = () => {
               });
             }
 
-            // Add recipe to target restaurant
-            await addDoc(getRecipeCategoryCollection(targetRestaurantId, formData.category), recipeData);
+            // When editing, search for existing recipe in target venue to update instead of creating duplicate
+            if (editingRecipe) {
+              // Search for existing recipe with the same name across all categories in target venue
+              let existingRecipeFound = false;
+              let existingRecipeId: string | null = null;
+              let existingRecipeCategory: string | null = null;
+
+              // Search through all categories in target venue
+              for (const category of targetCategories) {
+                const categoryQuery = query(
+                  getRecipeCategoryCollection(targetRestaurantId, category),
+                  orderBy('createdAt', 'desc')
+                );
+                const categorySnapshot = await getDocs(categoryQuery);
+                
+                // Check if a recipe with the same name exists
+                const matchingRecipe = categorySnapshot.docs.find(
+                  doc => doc.data().recipeName === formData.recipeName
+                );
+
+                if (matchingRecipe) {
+                  existingRecipeFound = true;
+                  existingRecipeId = matchingRecipe.id;
+                  existingRecipeCategory = category;
+                  break;
+                }
+              }
+
+              if (existingRecipeFound && existingRecipeId && existingRecipeCategory) {
+                // Recipe exists - update it
+                // If category changed, move to new category
+                if (existingRecipeCategory !== formData.category) {
+                  // Delete from old category
+                  await deleteDoc(
+                    getRecipeInCategoryDoc(targetRestaurantId, existingRecipeCategory, existingRecipeId)
+                  );
+                  // Create in new category
+                  await addDoc(
+                    getRecipeCategoryCollection(targetRestaurantId, formData.category),
+                    recipeData
+                  );
+                } else {
+                  // Update in same category
+                  await updateDoc(
+                    getRecipeInCategoryDoc(targetRestaurantId, formData.category, existingRecipeId),
+                    recipeData
+                  );
+                }
+                console.log(`✅ Updated existing recipe "${formData.recipeName}" in venue ${targetRestaurantId}`);
+              } else {
+                // Recipe doesn't exist - create new one
+                await addDoc(getRecipeCategoryCollection(targetRestaurantId, formData.category), recipeData);
+                console.log(`➕ Created new recipe "${formData.recipeName}" in venue ${targetRestaurantId}`);
+              }
+            } else {
+              // Creating new recipe (not editing) - always create new
+              await addDoc(getRecipeCategoryCollection(targetRestaurantId, formData.category), recipeData);
+            }
           } catch (error) {
             console.error(`Error copying recipe to ${targetRestaurantId}:`, error);
           }
@@ -630,6 +689,8 @@ const Recipes: React.FC = () => {
 
   const openManageCategoriesModal = () => {
     setShowManageCategoriesModal(true);
+    // Cancel any editing when opening modal
+    cancelEditingCategory();
   };
 
   const deleteCategory = async (categoryToDelete: string) => {
@@ -654,6 +715,139 @@ const Recipes: React.FC = () => {
       
     } catch (error) {
       console.error('Error deleting category:', error);
+    }
+  };
+
+  // Drag and drop handlers for categories
+  const handleCategoryDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedCategoryIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleCategoryDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedCategoryIndex === null || draggedCategoryIndex === dropIndex || !restaurantId) {
+      setDraggedCategoryIndex(null);
+      return;
+    }
+    
+    try {
+      const updatedCategories = [...categories];
+      const [draggedCategory] = updatedCategories.splice(draggedCategoryIndex, 1);
+      updatedCategories.splice(dropIndex, 0, draggedCategory);
+      
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        names: updatedCategories
+      });
+      
+      setCategories(updatedCategories);
+      
+      // Clear cache since categories have been modified
+      clearCache(restaurantId);
+    } catch (error) {
+      console.error('Error reordering category:', error);
+    } finally {
+      setDraggedCategoryIndex(null);
+    }
+  };
+
+  const startEditingCategory = (index: number) => {
+    setEditingCategoryIndex(index);
+    setEditingCategoryName(categories[index]);
+  };
+
+  const cancelEditingCategory = () => {
+    setEditingCategoryIndex(null);
+    setEditingCategoryName('');
+  };
+
+  const saveCategoryEdit = async (index: number) => {
+    if (!restaurantId) return;
+
+    const oldCategoryName = categories[index];
+    const newCategoryName = editingCategoryName.trim();
+
+    // Validation
+    if (!newCategoryName) {
+      alert('Category name cannot be empty.');
+      return;
+    }
+
+    if (newCategoryName === oldCategoryName) {
+      // No change, just cancel editing
+      cancelEditingCategory();
+      return;
+    }
+
+    // Check for duplicates (case-insensitive)
+    const duplicateIndex = categories.findIndex(
+      (cat, idx) => idx !== index && cat.toLowerCase() === newCategoryName.toLowerCase()
+    );
+    if (duplicateIndex !== -1) {
+      alert(`A category named "${categories[duplicateIndex]}" already exists.`);
+      return;
+    }
+
+    try {
+      // Get all recipes from the old category collection
+      const oldCategoryQuery = query(
+        getRecipeCategoryCollection(restaurantId, oldCategoryName),
+        orderBy('createdAt', 'desc')
+      );
+      const oldCategorySnapshot = await getDocs(oldCategoryQuery);
+      const recipesToMove = oldCategorySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Update category name in categories list
+      const updatedCategories = [...categories];
+      updatedCategories[index] = newCategoryName;
+
+      // Ensure new category exists in categories list (it will since we're updating it)
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        names: updatedCategories
+      });
+
+      // Move all recipes from old category collection to new category collection
+      for (const recipe of recipesToMove) {
+        const { id, ...recipeData } = recipe;
+        const updatedRecipeData = {
+          ...recipeData,
+          category: newCategoryName, // Update category field in recipe data
+        };
+
+        // Create in new category collection
+        await addDoc(getRecipeCategoryCollection(restaurantId, newCategoryName), updatedRecipeData);
+
+        // Delete from old category collection
+        await deleteDoc(getRecipeInCategoryDoc(restaurantId, oldCategoryName, id as string));
+      }
+
+      // Update local state
+      setCategories(updatedCategories);
+
+      // Update selected category if it was the one being edited
+      if (selectedCategory === oldCategoryName) {
+        setSelectedCategory(newCategoryName);
+      }
+
+      // Clear cache since categories and recipes have been modified
+      clearCache(restaurantId);
+
+      // Cancel editing mode
+      cancelEditingCategory();
+
+      // Reload to show updated recipes
+      window.location.reload();
+    } catch (error) {
+      console.error('Error updating category name:', error);
+      alert('Error updating category name. Please try again.');
     }
   };
 
@@ -732,11 +926,22 @@ const Recipes: React.FC = () => {
               margin: 0.5in;
               size: A4;
             }
+            * {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
               line-height: 1.6;
               color: #333;
               background: white;
+            }
+            .recipe-container {
+              page-break-inside: avoid;
+              transform: scale(0.75);
+              transform-origin: top center;
+              width: 133.33%;
+              margin-left: -16.67%;
             }
           }
           body {
@@ -877,7 +1082,6 @@ const Recipes: React.FC = () => {
             </div>
           `).join('')}
 
-
           ${recipe.notes && recipe.notes.trim() ? `
             <div class="section-title">Allergens & Notes</div>
             <div class="notes-section">
@@ -925,11 +1129,23 @@ const Recipes: React.FC = () => {
                 margin: 0.5in;
                 size: A4;
               }
+              * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
               body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
                 line-height: 1.6;
                 color: #333;
                 background: white;
+              }
+              .recipe-container {
+                page-break-inside: avoid;
+                page-break-after: always;
+                transform: scale(0.75);
+                transform-origin: top center;
+                width: 133.33%;
+                margin-left: -16.67%;
               }
               .page-break {
                 page-break-before: always;
@@ -1101,20 +1317,19 @@ const Recipes: React.FC = () => {
                   </div>
                 `).join('')}
 
-
                 ${recipe.notes && recipe.notes.trim() ? `
                   <div class="section-title">Allergens & Notes</div>
                   <div class="notes-section">
                     <p class="notes-text">${recipe.notes}</p>
                   </div>
                 ` : ''}
+
+                <div class="print-date">
+                  Printed on ${new Date().toLocaleDateString()} from ChefFlow Admin
+                </div>
               </div>
             `;
           }).join('')}
-
-          <div class="print-date">
-            Printed on ${new Date().toLocaleDateString()} from ChefFlow Admin
-          </div>
         </body>
         </html>
       `;
@@ -2093,36 +2308,138 @@ const Recipes: React.FC = () => {
               <div className="modal-body">
                 <div className="space-y-4">
                   <p className="text-gray-600 mb-4">
-                    Delete categories you no longer need. Note: Recipes in deleted categories will remain but won't be visible until moved to another category.
+                    Edit category names using the ✏️ button, drag categories by the handle (☰) to reorder them. Delete categories you no longer need. Note: Recipes in deleted categories will remain but won't be visible until moved to another category.
                   </p>
                   
                   {categories.length === 0 ? (
                     <p className="text-gray-500">No categories available.</p>
                   ) : (
                     <div className="space-y-2">
-                      {categories.map((category) => (
+                      {categories.map((category, index) => (
                         <div
                           key={category}
-                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
+                          draggable
+                          onDragStart={(e) => handleCategoryDragStart(e, index)}
+                          onDragOver={handleCategoryDragOver}
+                          onDrop={(e) => handleCategoryDrop(e, index)}
+                          className="flex items-center justify-between p-3 border border-gray-200 rounded-lg cursor-move transition-all"
+                          style={{
+                            opacity: draggedCategoryIndex === index ? 0.5 : 1,
+                            backgroundColor: draggedCategoryIndex === index ? '#f3f4f6' : 'white'
+                          }}
                         >
-                          <span className="font-medium">{category}</span>
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Are you sure you want to delete the "${category}" category?`)) {
-                                deleteCategory(category);
-                              }
-                            }}
-                            className="btn btn-sm"
-                            style={{
-                              backgroundColor: '#ef4444',
-                              color: 'white',
-                              border: 'none',
-                              padding: '4px 8px',
-                              fontSize: '12px'
-                            }}
-                          >
-                            Delete
-                          </button>
+                          <div className="flex items-center gap-3 flex-1">
+                            <div
+                              className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing"
+                              style={{
+                                userSelect: 'none',
+                                fontSize: '18px',
+                                lineHeight: '1'
+                              }}
+                              title="Drag to reorder"
+                            >
+                              ☰
+                            </div>
+                            <div className="flex items-center gap-2 flex-1">
+                              {editingCategoryIndex === index ? (
+                                <div className="flex items-center gap-2 flex-1">
+                                  <input
+                                    type="text"
+                                    value={editingCategoryName}
+                                    onChange={(e) => setEditingCategoryName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        saveCategoryEdit(index);
+                                      } else if (e.key === 'Escape') {
+                                        cancelEditingCategory();
+                                      }
+                                    }}
+                                    className="form-input"
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '14px',
+                                      flex: 1,
+                                      maxWidth: '300px'
+                                    }}
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => saveCategoryEdit(index)}
+                                    className="btn btn-sm"
+                                    style={{
+                                      backgroundColor: '#10b981',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '4px 8px',
+                                      fontSize: '12px'
+                                    }}
+                                    title="Save"
+                                  >
+                                    ✓
+                                  </button>
+                                  <button
+                                    onClick={cancelEditingCategory}
+                                    className="btn btn-sm"
+                                    style={{
+                                      backgroundColor: '#6b7280',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '4px 8px',
+                                      fontSize: '12px'
+                                    }}
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-medium">{category}</span>
+                                  <span className="text-xs text-gray-400">({index + 1})</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {editingCategoryIndex !== index && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startEditingCategory(index);
+                                }}
+                                className="btn btn-sm"
+                                style={{
+                                  backgroundColor: '#f59e0b',
+                                  color: 'white',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  fontSize: '12px'
+                                }}
+                                title="Edit category name"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Are you sure you want to delete the "${category}" category?`)) {
+                                    deleteCategory(category);
+                                  }
+                                }}
+                                className="btn btn-sm"
+                                style={{
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  padding: '4px 8px',
+                                  fontSize: '12px'
+                                }}
+                                title="Delete"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2132,7 +2449,10 @@ const Recipes: React.FC = () => {
 
               <div className="modal-footer">
                 <button
-                  onClick={() => setShowManageCategoriesModal(false)}
+                  onClick={() => {
+                    cancelEditingCategory();
+                    setShowManageCategoriesModal(false);
+                  }}
                   className="btn btn-secondary"
                 >
                   Close

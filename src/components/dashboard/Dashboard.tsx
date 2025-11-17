@@ -25,6 +25,11 @@ interface DashboardStats {
   ehoTemperatureEntered: boolean;
 }
 
+interface EhoDayStatus {
+  date: string;
+  completed: boolean;
+}
+
 interface RecentActivity {
   id: string;
   type: 'prep' | 'order' | 'closing' | 'fridge' | 'delivery';
@@ -83,6 +88,8 @@ const Dashboard: React.FC = () => {
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showEhoHistory, setShowEhoHistory] = useState(false);
+  const [ehoHistory, setEhoHistory] = useState<EhoDayStatus[]>([]);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -259,19 +266,28 @@ const Dashboard: React.FC = () => {
     const unsubFridge = onSnapshot(fridgeQuery, async (snapshot) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const daysToTrack = 60;
+      const historyMap = new Map<string, boolean>();
 
-      // Check for fridges with temperature readings entered today
-      const fridgesWithTemperatureReadings = snapshot.docs.filter(doc => {
+      for (let i = 0; i < daysToTrack; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        const key = date.toISOString().split('T')[0];
+        historyMap.set(key, false);
+      }
+
+      snapshot.docs.forEach(doc => {
         const data = doc.data();
 
-        // Check if this fridge has temperature readings
         const hasTemperatureReading = (data.temperatureAM && data.temperatureAM.toString().trim() !== '') ||
           (data.temperaturePM && data.temperaturePM.toString().trim() !== '');
 
-        // Check if the fridge log was created/updated today using createdAt timestamp
-        let isToday = false;
+        if (!hasTemperatureReading) {
+          return;
+        }
+
+        let entryDate: Date | null = null;
         if (data.createdAt) {
-          let entryDate = new Date();
           if (data.createdAt.toDate) {
             entryDate = data.createdAt.toDate();
           } else if (data.createdAt.seconds) {
@@ -279,23 +295,34 @@ const Dashboard: React.FC = () => {
           } else if (typeof data.createdAt === 'string') {
             entryDate = new Date(data.createdAt);
           }
-          entryDate.setHours(0, 0, 0, 0);
-          isToday = entryDate.getTime() === today.getTime();
         }
 
-        // Only consider it a "today entry" if it has temperature readings AND is from today
-        return hasTemperatureReading && isToday;
+        if (!entryDate || Number.isNaN(entryDate.getTime())) {
+          return;
+        }
+
+        entryDate.setHours(0, 0, 0, 0);
+        const diffInDays = Math.round((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffInDays >= 0 && diffInDays < daysToTrack) {
+          const key = entryDate.toISOString().split('T')[0];
+          historyMap.set(key, true);
+        }
       });
 
-      // Consider it "done" if there are temperature readings from today
-      const todayFridgeEntries = fridgesWithTemperatureReadings;
-
-      const hasTemperatureEntry = todayFridgeEntries.length > 0;
+      const todayKey = today.toISOString().split('T')[0];
+      const hasTemperatureEntry = historyMap.get(todayKey) === true;
 
       setStats(prev => ({
         ...prev,
         ehoTemperatureEntered: hasTemperatureEntry
       }));
+
+      const historyArray = Array.from(historyMap.entries())
+        .map(([date, completed]) => ({ date, completed }))
+        .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+      setEhoHistory(historyArray);
 
       const fridgeActivitiesPromises = snapshot.docs.slice(0, 5).map(async (doc) => {
         const data = doc.data();
@@ -535,7 +562,11 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="stat-card" style={{ position: 'relative', overflow: 'hidden' }}>
+          <div
+            className="stat-card"
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+            onClick={() => setShowEhoHistory(true)}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div style={{ fontSize: '1.5rem', color: '#8b5cf6' }}>🌡️</div>
               <div className="stat-label">EHO</div>
@@ -637,6 +668,65 @@ const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {showEhoHistory && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowEhoHistory(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="eho-history-title"
+        >
+          <div
+            className="modal"
+            style={{ maxWidth: '720px', width: '90%', maxHeight: '80vh', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 id="eho-history-title" style={{ margin: 0 }}>EHO Temperature Log History</h3>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowEhoHistory(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div style={{ padding: '1rem', overflowY: 'auto', maxHeight: '60vh' }}>
+              <p style={{ marginTop: 0, color: 'var(--text-secondary)' }}>
+                Showing the last 60 days. Green indicates temperatures were logged for that day.
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                  gap: '0.75rem'
+                }}
+              >
+                {ehoHistory.map(({ date, completed }) => (
+                  <div
+                    key={date}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: '0.5rem',
+                      border: '1px solid',
+                      borderColor: completed ? '#86efac' : '#fca5a5',
+                      backgroundColor: completed ? '#dcfce7' : '#fee2e2',
+                      color: completed ? '#166534' : '#991b1b',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{new Date(date + 'T00:00:00').toLocaleDateString()}</span>
+                    <span style={{ fontSize: '0.875rem' }}>{completed ? 'Logged' : 'Missing'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
