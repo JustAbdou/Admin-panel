@@ -267,8 +267,10 @@ const Dashboard: React.FC = () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const daysToTrack = 60;
+      const todayKey = today.toISOString().split('T')[0];
       const historyMap = new Map<string, boolean>();
 
+      // Initialize all 60 days as false (incomplete)
       for (let i = 0; i < daysToTrack; i++) {
         const date = new Date(today);
         date.setDate(today.getDate() - i);
@@ -276,48 +278,98 @@ const Dashboard: React.FC = () => {
         historyMap.set(key, false);
       }
 
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
+      // Explicitly filter for fridge definition documents
+      // Fridge definitions have: fridgeName, fridgeType, temperatureAM, temperaturePM, done, restaurantId
+      // They do NOT have createdAt (that's for log entries)
+      // Additional safety: ensure fridgeName exists and is not empty
+      const allFridges = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return { id: doc.id, ...data };
+        })
+        .filter(data => {
+          // Explicit filtering: must have fridgeName and no createdAt
+          // This identifies fridge definition documents vs log entries
+          const hasFridgeName = data.fridgeName && typeof data.fridgeName === 'string' && data.fridgeName.trim() !== '';
+          const isNotLogEntry = !data.createdAt; // Log entries have createdAt
+          return hasFridgeName && isNotLogEntry;
+        });
 
-        const hasTemperatureReading = (data.temperatureAM && data.temperatureAM.toString().trim() !== '') ||
-          (data.temperaturePM && data.temperaturePM.toString().trim() !== '');
+      // Debug log: show what fridges we're checking
+      console.log('[EHO] Checking fridges:', {
+        totalDocs: snapshot.docs.length,
+        filteredFridges: allFridges.length,
+        fridgeNames: allFridges.map(f => f.fridgeName)
+      });
 
-        if (!hasTemperatureReading) {
-          return;
-        }
+      // Compute completion status: ALL fridges must have BOTH AM and PM filled
+      let allFilled = false;
+      const validationResults: Array<{fridgeName: string, hasAM: boolean, hasPM: boolean, tempAM: any, tempPM: any}> = [];
 
-        let entryDate: Date | null = null;
-        if (data.createdAt) {
-          if (data.createdAt.toDate) {
-            entryDate = data.createdAt.toDate();
-          } else if (data.createdAt.seconds) {
-            entryDate = new Date(data.createdAt.seconds * 1000);
-          } else if (typeof data.createdAt === 'string') {
-            entryDate = new Date(data.createdAt);
+      if (allFridges.length > 0) {
+        // Start optimistic - will set to false if any fridge fails
+        allFilled = true;
+
+        for (const fridge of allFridges) {
+          const fridgeName = fridge.fridgeName || 'Unknown';
+          
+          // Validate AM temperature: must exist, not null, not undefined, not empty string, not just whitespace
+          // Note: 0 is valid (can be a real temperature reading)
+          const tempAM = fridge.temperatureAM;
+          const hasAM = (tempAM != null) &&           // Covers both null and undefined
+                       (tempAM !== '') &&              // Not empty string
+                       (String(tempAM).trim() !== ''); // Not just whitespace
+          
+          // Validate PM temperature: same criteria
+          const tempPM = fridge.temperaturePM;
+          const hasPM = (tempPM != null) &&           // Covers both null and undefined
+                       (tempPM !== '') &&              // Not empty string
+                       (String(tempPM).trim() !== ''); // Not just whitespace
+
+          validationResults.push({
+            fridgeName,
+            hasAM,
+            hasPM,
+            tempAM: tempAM === null || tempAM === undefined ? null : String(tempAM),
+            tempPM: tempPM === null || tempPM === undefined ? null : String(tempPM)
+          });
+
+          // If ANY fridge is missing either AM or PM, mark as incomplete
+          if (!hasAM || !hasPM) {
+            allFilled = false;
+            
+            // Debug log: show which fridge/field is failing
+            console.warn('[EHO] Validation failed for fridge:', {
+              fridgeName,
+              hasAM,
+              hasPM,
+              tempAM: tempAM === null ? 'null' : tempAM === undefined ? 'undefined' : tempAM === '' ? 'empty string' : `"${tempAM}"`,
+              tempPM: tempPM === null ? 'null' : tempPM === undefined ? 'undefined' : tempPM === '' ? 'empty string' : `"${tempPM}"`
+            });
           }
         }
 
-        if (!entryDate || Number.isNaN(entryDate.getTime())) {
-          return;
-        }
+        // Debug log: show final validation results
+        console.log('[EHO] Validation complete:', {
+          allFilled,
+          totalFridges: allFridges.length,
+          results: validationResults
+        });
+      } else {
+        console.log('[EHO] No fridges found - marking as incomplete');
+      }
 
-        entryDate.setHours(0, 0, 0, 0);
-        const diffInDays = Math.round((today.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+      // Single source of truth: use allFilled for both historyMap and stats
+      // Set today's status in history map
+      historyMap.set(todayKey, allFilled);
 
-        if (diffInDays >= 0 && diffInDays < daysToTrack) {
-          const key = entryDate.toISOString().split('T')[0];
-          historyMap.set(key, true);
-        }
-      });
-
-      const todayKey = today.toISOString().split('T')[0];
-      const hasTemperatureEntry = historyMap.get(todayKey) === true;
-
+      // Update dashboard stats using the same computed value
       setStats(prev => ({
         ...prev,
-        ehoTemperatureEntered: hasTemperatureEntry
+        ehoTemperatureEntered: allFilled
       }));
 
+      // Generate history array for the EHO history modal
       const historyArray = Array.from(historyMap.entries())
         .map(([date, completed]) => ({ date, completed }))
         .sort((a, b) => (a.date < b.date ? 1 : -1));
