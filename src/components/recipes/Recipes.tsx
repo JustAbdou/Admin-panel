@@ -7,7 +7,10 @@ import {
   orderBy,
   getDoc,
   getDocs,
-  setDoc
+  setDoc,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore';
 import { useRestaurant } from '../../contexts/RestaurantContext';
 import {
@@ -23,7 +26,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 interface CacheData {
   recipes: Recipe[];
-  categories: string[];
+  categories: Category[] | string[]; // Support both old (string[]) and new (Category[]) formats
   timestamp: number;
   restaurantId: string; // Add restaurantId to cache
 }
@@ -143,6 +146,16 @@ interface Recipe {
   instructions: string[];
   notes: string;
   recipeName: string;
+  archived?: boolean; // Default false if missing
+  archivedAt?: Timestamp | null;
+  archivedBy?: string | null;
+}
+
+interface Category {
+  name: string;
+  archived?: boolean; // Default false if missing
+  archivedAt?: Timestamp | null;
+  archivedBy?: string | null;
 }
 
 interface RecipeFormData {
@@ -155,12 +168,13 @@ interface RecipeFormData {
 }
 
 const Recipes: React.FC = () => {
-  const { restaurantId, availableRestaurants } = useRestaurant();
+  const { restaurantId, availableRestaurants, user } = useRestaurant();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
+  const [categoryTab, setCategoryTab] = useState<'active' | 'archived'>('active');
   const [formData, setFormData] = useState<RecipeFormData>({
     category: '',
     image: [], // Keep as array internally for multiple images
@@ -180,6 +194,7 @@ const Recipes: React.FC = () => {
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [printingAll, setPrintingAll] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
 
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
   const [draggedCategoryIndex, setDraggedCategoryIndex] = useState<number | null>(null);
@@ -279,45 +294,128 @@ const Recipes: React.FC = () => {
   useEffect(() => {
     if (!restaurantId) return;
 
-    const loadInitialData = async () => {
-      // Try to load from cache first
-      const cachedData = getCachedData(restaurantId);
-      if (cachedData && cachedData.categories.length > 0) {
-        console.log(`📱 Loading categories from cache for restaurant: ${restaurantId}`);
-        setIsLoadingFromCache(true);
-        setCategories(cachedData.categories);
-        setRecipes(cachedData.recipes);
-        setLoading(false);
-        // Show cache indicator briefly
-        setTimeout(() => setIsLoadingFromCache(false), 2000);
-        return;
-      }
+    // Try to load from cache first
+    const cachedData = getCachedData(restaurantId);
+    if (cachedData && cachedData.categories.length > 0) {
+      console.log(`📱 Loading categories from cache for restaurant: ${restaurantId}`);
+      setIsLoadingFromCache(true);
+      // Convert old format (string[]) to new format (Category[]) if needed
+      const cachedCategories: Category[] = cachedData.categories.map((cat: any) => 
+        typeof cat === 'string' 
+          ? { name: cat, archived: false, archivedAt: null, archivedBy: null }
+          : {
+              name: cat.name || cat,
+              archived: cat.archived === true, // Ensure boolean conversion
+              archivedAt: cat.archivedAt || null,
+              archivedBy: cat.archivedBy || null,
+            }
+      );
+      setCategories(cachedCategories);
+      setRecipes(cachedData.recipes);
+      setLoading(false);
+      // Show cache indicator briefly
+      setTimeout(() => setIsLoadingFromCache(false), 2000);
+    }
 
-      // If no cache, load from Firebase
-      await loadCategories();
-    };
-
-    const loadCategories = async () => {
-      try {
-        console.log(`🔥 Loading categories from Firebase for restaurant: ${restaurantId}`);
-        const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
-        if (categoriesDoc.exists()) {
-          const data = categoriesDoc.data();
-          setCategories(data.names || []);
+    // Set up real-time listener for categories (will override cache if data changes)
+    const categoriesDocRef = getRecipeCategoriesDoc(restaurantId);
+    const unsubscribe = onSnapshot(
+      categoriesDocRef,
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          
+          // Handle both old format (names: string[]) and new format (categories: Category[])
+          if (data.categories && Array.isArray(data.categories)) {
+            // New format with Category objects
+            const loadedCategories: Category[] = data.categories.map((cat: any) => ({
+              name: cat.name || cat,
+              archived: cat.archived === true, // Explicitly check for true
+              archivedAt: cat.archivedAt || null,
+              archivedBy: cat.archivedBy || null,
+            }));
+            setCategories(loadedCategories);
+            
+            // Update cache with latest data
+            const currentCache = getCachedData(restaurantId);
+            if (currentCache) {
+              setCachedData(
+                {
+                  ...currentCache,
+                  categories: loadedCategories,
+                },
+                restaurantId
+              );
+            }
+          } else if (data.names && Array.isArray(data.names)) {
+            // Old format - convert to Category objects
+            const categoryObjects: Category[] = data.names.map((name: string) => ({
+              name,
+              archived: false,
+              archivedAt: null,
+              archivedBy: null,
+            }));
+            setCategories(categoryObjects);
+            
+            // Migrate to new format
+            setDoc(categoriesDocRef, {
+              categories: categoryObjects,
+              names: data.names, // Keep for backward compatibility
+            }, { merge: true });
+          } else {
+            setCategories([]);
+          }
         } else {
           setCategories([]);
         }
-        // Set loading to false even if no categories exist
         setLoading(false);
-      } catch (error) {
-        console.error('Error loading categories:', error);
-        setCategories([]);
+        setIsLoadingFromCache(false);
+      },
+      (error) => {
+        console.error('Error in categories real-time listener:', error);
         setLoading(false);
+        setIsLoadingFromCache(false);
       }
-    };
+    );
 
-    loadInitialData();
+    // Cleanup function
+    return () => {
+      unsubscribe();
+    };
   }, [restaurantId]);
+
+  // Helper functions for categories
+  const getActiveCategories = (): Category[] => {
+    return categories.filter(cat => {
+      // Explicitly check: only return false if archived is explicitly true
+      return cat.archived !== true;
+    });
+  };
+
+  const getArchivedCategories = (): Category[] => {
+    return categories.filter(cat => {
+      // Explicitly check: only return true if archived is explicitly true
+      return cat.archived === true;
+    });
+  };
+
+  const getCategoryNames = (cats: Category[] = categories): string[] => {
+    return cats.map(cat => cat.name);
+  };
+
+  const getCategoryByName = (name: string): Category | undefined => {
+    return categories.find(cat => cat.name === name);
+  };
+
+  const isCategoryArchived = (categoryName: string): boolean => {
+    const category = getCategoryByName(categoryName);
+    return category?.archived === true;
+  };
+
+  // Get categories based on active tab
+  const getDisplayCategories = (): Category[] => {
+    return categoryTab === 'archived' ? getArchivedCategories() : getActiveCategories();
+  };
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -325,73 +423,100 @@ const Recipes: React.FC = () => {
     // If no categories, just set empty recipes and we're done
     if (categories.length === 0) {
       setRecipes([]);
+      setLoading(false);
       return;
     }
 
-    const loadAllRecipes = async () => {
+    console.log(`🔥 Setting up real-time listeners for recipes (${activeTab}) for restaurant: ${restaurantId}`);
+    
+    const unsubscribeFunctions: (() => void)[] = [];
+    const initializedCategories = new Set<string>();
+
+    // Set up real-time listeners for each category
+    for (const categoryObj of categories) {
+      const categoryName = categoryObj.name;
       try {
-        // Check if we already have cached recipes that match our categories
-        const cachedData = getCachedData(restaurantId);
-        if (cachedData && cachedData.recipes.length > 0 &&
-            JSON.stringify(cachedData.categories) === JSON.stringify(categories)) {
-          console.log(`📱 Loading recipes from cache for restaurant: ${restaurantId}`);
-          setIsLoadingFromCache(true);
-          setRecipes(cachedData.recipes);
-          setLoading(false);
-          // Show cache indicator briefly
-          setTimeout(() => setIsLoadingFromCache(false), 2000);
-          return;
-        }
+        // Query all recipes and filter client-side to handle missing archived field
+        // This ensures recipes without archived field (treated as false) are included in active tab
+        const categoryQuery = query(
+          getRecipeCategoryCollection(restaurantId, categoryName),
+          orderBy('createdAt', 'desc')
+        );
 
-        console.log(`🔥 Loading recipes from Firebase for restaurant: ${restaurantId}`);
-        const allRecipes: Recipe[] = [];
+        const unsubscribe = onSnapshot(
+          categoryQuery,
+          (snapshot) => {
+            const categoryRecipes = snapshot.docs.map((doc: any) => {
+              const data = doc.data();
+              // Handle backwards compatibility: ensure image is always array for display
+              let imageArray: string[] = [];
+              if (Array.isArray(data.image)) {
+                imageArray = data.image;
+              } else if (typeof data.image === 'string' && data.image) {
+                imageArray = [data.image];
+              }
 
-        for (const category of categories) {
-          const categoryQuery = query(
-            getRecipeCategoryCollection(restaurantId, category),
-            orderBy('createdAt', 'desc')
-          );
+              // Handle archived field: default to false if missing (as per requirements)
+              const archived = data.archived === true;
 
-          const snapshot = await getDocs(categoryQuery);
-          const categoryRecipes = snapshot.docs.map(doc => {
-            const data = doc.data();
-            // Handle backwards compatibility: ensure image is always array for display
-            let imageArray: string[] = [];
-            if (Array.isArray(data.image)) {
-              imageArray = data.image;
-            } else if (typeof data.image === 'string' && data.image) {
-              imageArray = [data.image];
+              return {
+                id: doc.id,
+                ...data,
+                image: imageArray, // Convert to array for internal use
+                archived: archived,
+                archivedAt: data.archivedAt || null,
+                archivedBy: data.archivedBy || null,
+              } as Recipe;
+            });
+
+            // Filter by archived status based on active tab
+            const filteredRecipes = categoryRecipes.filter(recipe => {
+              const recipeArchived = recipe.archived === true;
+              const categoryArchived = isCategoryArchived(recipe.category);
+              
+              if (activeTab === 'archived') {
+                // Archived tab: show recipes that are archived OR recipes from archived categories
+                return recipeArchived || categoryArchived;
+              } else {
+                // Active tab: show recipes that are not archived AND not from archived categories
+                return !recipeArchived && !categoryArchived;
+              }
+            });
+
+            // Update recipes for this category
+            setRecipes(prev => {
+              // Remove old recipes from this category
+              const filtered = prev.filter(r => r.category !== categoryName);
+              // Add new filtered recipes from this category
+              return [...filtered, ...filteredRecipes];
+            });
+
+            // Track initialized categories to set loading to false when all are initialized
+            if (!initializedCategories.has(categoryName)) {
+              initializedCategories.add(categoryName);
+              if (initializedCategories.size === categories.length) {
+                setLoading(false);
+              }
             }
+          },
+          (error) => {
+            console.error(`Error in real-time listener for category ${categoryName}:`, error);
+            setLoading(false);
+          }
+        );
 
-            return {
-              id: doc.id,
-              ...data,
-              image: imageArray, // Convert to array for internal use
-            } as Recipe;
-          });
-
-          allRecipes.push(...categoryRecipes);
-        }
-
-        setRecipes(allRecipes);
-
-        // Cache the data with restaurantId
-        setCachedData({
-          recipes: allRecipes,
-          categories: [...categories],
-          timestamp: Date.now(),
-          restaurantId: restaurantId
-        }, restaurantId);
-
-        setLoading(false);
+        unsubscribeFunctions.push(unsubscribe);
       } catch (error) {
-        console.error('Error loading recipes:', error);
+        console.error(`Error setting up listener for category ${categoryName}:`, error);
         setLoading(false);
       }
-    };
+    }
 
-    loadAllRecipes();
-  }, [restaurantId, categories]);
+    // Cleanup function
+    return () => {
+      unsubscribeFunctions.forEach(unsubscribe => unsubscribe());
+    };
+  }, [restaurantId, categories, activeTab]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -444,24 +569,35 @@ const Recipes: React.FC = () => {
         notes: formData.notes,
         recipeName: formData.recipeName,
         createdAt: new Date().toISOString(),
+        archived: false, // New recipes are not archived by default
+        archivedAt: null,
+        archivedBy: null,
       };
 
       if (editingRecipe) {
+        // Preserve archived status when editing
+        const preservedArchivedData = {
+          ...recipeData,
+          archived: editingRecipe.archived === true,
+          archivedAt: editingRecipe.archivedAt || null,
+          archivedBy: editingRecipe.archivedBy || null,
+        };
+        
         // If category changed, we need to delete from old category and create in new category
         if (editingRecipe.category !== formData.category) {
           // Delete from old category
           await deleteDoc(getRecipeInCategoryDoc(restaurantId, editingRecipe.category, editingRecipe.id));
-          // Create in new category
-          await addDoc(getRecipeCategoryCollection(restaurantId, formData.category), recipeData);
+          // Create in new category with preserved archived status
+          await addDoc(getRecipeCategoryCollection(restaurantId, formData.category), preservedArchivedData);
         } else {
-          // Update in same category
+          // Update in same category (preserve archived status)
           await updateDoc(
             getRecipeInCategoryDoc(restaurantId, formData.category, editingRecipe.id),
-            recipeData
+            preservedArchivedData
           );
         }
       } else {
-        // Add to current restaurant
+        // Add to current restaurant (new recipe, not archived)
         await addDoc(getRecipeCategoryCollection(restaurantId, formData.category), recipeData);
       }
 
@@ -641,6 +777,44 @@ const Recipes: React.FC = () => {
     }
   };
 
+  const handleArchive = async (recipe: Recipe) => {
+    if (!restaurantId || !user) return;
+    
+    try {
+      const recipeRef = getRecipeInCategoryDoc(restaurantId, recipe.category, recipe.id);
+      await updateDoc(recipeRef, {
+        archived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: user.uid
+      });
+      // Clear cache since recipes have been modified
+      clearCache(restaurantId);
+      // Real-time listener will update automatically
+    } catch (error) {
+      console.error('Error archiving recipe:', error);
+      alert('Error archiving recipe. Please try again.');
+    }
+  };
+
+  const handleRestore = async (recipe: Recipe) => {
+    if (!restaurantId || !user) return;
+    
+    try {
+      const recipeRef = getRecipeInCategoryDoc(restaurantId, recipe.category, recipe.id);
+      await updateDoc(recipeRef, {
+        archived: false,
+        archivedAt: null,
+        archivedBy: null
+      });
+      // Clear cache since recipes have been modified
+      clearCache(restaurantId);
+      // Real-time listener will update automatically
+    } catch (error) {
+      console.error('Error restoring recipe:', error);
+      alert('Error restoring recipe. Please try again.');
+    }
+  };
+
   const openAddModal = () => {
     setEditingRecipe(null);
     resetForm();
@@ -652,24 +826,27 @@ const Recipes: React.FC = () => {
     if (!restaurantId || !newCategoryName.trim()) return;
 
     try {
-      const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
-      let updatedCategories: string[] = [];
-
-      if (categoriesDoc.exists()) {
-        const data = categoriesDoc.data();
-        updatedCategories = data.names || [];
-      }
-
-      if (updatedCategories.some(cat => cat.toLowerCase() === newCategoryName.trim().toLowerCase())) {
+      const categoryName = newCategoryName.trim();
+      
+      // Check if category already exists (case-insensitive)
+      if (categories.some(cat => cat.name.toLowerCase() === categoryName.toLowerCase())) {
         alert('Category already exists!');
         return;
       }
 
-      updatedCategories.push(newCategoryName.trim());
+      const newCategory: Category = {
+        name: categoryName,
+        archived: false,
+        archivedAt: null,
+        archivedBy: null,
+      };
+
+      const updatedCategories = [...categories, newCategory];
 
       await setDoc(getRecipeCategoriesDoc(restaurantId), {
-        names: updatedCategories
-      });
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
 
       setCategories(updatedCategories);
       setNewCategoryName('');
@@ -697,11 +874,12 @@ const Recipes: React.FC = () => {
     if (!restaurantId) return;
     
     try {
-      const updatedCategories = categories.filter(cat => cat !== categoryToDelete);
+      const updatedCategories = categories.filter(cat => cat.name !== categoryToDelete);
       
-      await updateDoc(getRecipeCategoriesDoc(restaurantId), {
-        names: updatedCategories
-      });
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
       
       setCategories(updatedCategories);
 
@@ -711,10 +889,78 @@ const Recipes: React.FC = () => {
 
       // Clear cache since categories have been modified
       clearCache(restaurantId);
-      
-      
     } catch (error) {
       console.error('Error deleting category:', error);
+    }
+  };
+
+  const handleArchiveCategory = async (categoryName: string) => {
+    if (!restaurantId || !user) return;
+    
+    if (!window.confirm(`Are you sure you want to archive "${categoryName}"? This will hide the category and all its recipes from the active view.`)) {
+      return;
+    }
+
+    try {
+      // Use current timestamp instead of serverTimestamp() since we're storing in an array
+      const now = new Date();
+      const updatedCategories = categories.map(cat => 
+        cat.name === categoryName
+          ? {
+              ...cat,
+              archived: true,
+              archivedAt: Timestamp.fromDate(now),
+              archivedBy: user.uid,
+            }
+          : cat
+      );
+
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
+
+      setCategories(updatedCategories);
+      
+      // Clear cache since categories have been modified
+      clearCache(restaurantId);
+    } catch (error) {
+      console.error('Error archiving category:', error);
+      alert(`Error archiving category: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+    }
+  };
+
+  const handleRestoreCategory = async (categoryName: string) => {
+    if (!restaurantId || !user) return;
+    
+    if (!window.confirm(`Are you sure you want to restore "${categoryName}"? This will make the category and its recipes visible in the active view.`)) {
+      return;
+    }
+
+    try {
+      const updatedCategories = categories.map(cat => 
+        cat.name === categoryName
+          ? {
+              ...cat,
+              archived: false,
+              archivedAt: null,
+              archivedBy: null,
+            }
+          : cat
+      );
+
+      await setDoc(getRecipeCategoriesDoc(restaurantId), {
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
+
+      setCategories(updatedCategories);
+      
+      // Clear cache since categories have been modified
+      clearCache(restaurantId);
+    } catch (error) {
+      console.error('Error restoring category:', error);
+      alert('Error restoring category. Please try again.');
     }
   };
 
@@ -737,13 +983,32 @@ const Recipes: React.FC = () => {
     }
     
     try {
+      const displayCategories = getDisplayCategories();
+      const draggedCategory = displayCategories[draggedCategoryIndex];
+      
+      // Update the full categories list
       const updatedCategories = [...categories];
-      const [draggedCategory] = updatedCategories.splice(draggedCategoryIndex, 1);
-      updatedCategories.splice(dropIndex, 0, draggedCategory);
+      const fullIndex = updatedCategories.findIndex(cat => cat.name === draggedCategory.name);
+      
+      if (fullIndex === -1) {
+        setDraggedCategoryIndex(null);
+        return;
+      }
+      
+      // Remove from current position
+      const [movedCategory] = updatedCategories.splice(fullIndex, 1);
+      
+      // Find the target position in full list
+      const targetDisplayCategory = displayCategories[dropIndex];
+      const targetFullIndex = updatedCategories.findIndex(cat => cat.name === targetDisplayCategory.name);
+      
+      // Insert at new position
+      updatedCategories.splice(targetFullIndex >= 0 ? targetFullIndex : dropIndex, 0, movedCategory);
       
       await setDoc(getRecipeCategoriesDoc(restaurantId), {
-        names: updatedCategories
-      });
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
       
       setCategories(updatedCategories);
       
@@ -757,8 +1022,9 @@ const Recipes: React.FC = () => {
   };
 
   const startEditingCategory = (index: number) => {
+    const displayCategories = getDisplayCategories();
     setEditingCategoryIndex(index);
-    setEditingCategoryName(categories[index]);
+    setEditingCategoryName(displayCategories[index].name);
   };
 
   const cancelEditingCategory = () => {
@@ -769,7 +1035,9 @@ const Recipes: React.FC = () => {
   const saveCategoryEdit = async (index: number) => {
     if (!restaurantId) return;
 
-    const oldCategoryName = categories[index];
+    const displayCategories = getDisplayCategories();
+    const oldCategory = displayCategories[index];
+    const oldCategoryName = oldCategory.name;
     const newCategoryName = editingCategoryName.trim();
 
     // Validation
@@ -786,10 +1054,10 @@ const Recipes: React.FC = () => {
 
     // Check for duplicates (case-insensitive)
     const duplicateIndex = categories.findIndex(
-      (cat, idx) => idx !== index && cat.toLowerCase() === newCategoryName.toLowerCase()
+      (cat) => cat.name.toLowerCase() === newCategoryName.toLowerCase() && cat.name !== oldCategoryName
     );
     if (duplicateIndex !== -1) {
-      alert(`A category named "${categories[duplicateIndex]}" already exists.`);
+      alert(`A category named "${categories[duplicateIndex].name}" already exists.`);
       return;
     }
 
@@ -806,13 +1074,17 @@ const Recipes: React.FC = () => {
       }));
 
       // Update category name in categories list
-      const updatedCategories = [...categories];
-      updatedCategories[index] = newCategoryName;
+      const updatedCategories = categories.map(cat => 
+        cat.name === oldCategoryName
+          ? { ...cat, name: newCategoryName }
+          : cat
+      );
 
       // Ensure new category exists in categories list (it will since we're updating it)
       await setDoc(getRecipeCategoriesDoc(restaurantId), {
-        names: updatedCategories
-      });
+        categories: updatedCategories,
+        names: getCategoryNames(updatedCategories), // Keep for backward compatibility
+      }, { merge: true });
 
       // Move all recipes from old category collection to new category collection
       for (const recipe of recipesToMove) {
@@ -894,6 +1166,20 @@ const Recipes: React.FC = () => {
   };
 
   const filteredRecipes = recipes.filter(recipe => {
+    // Filter by archived status based on active tab (safety check - query should already handle this)
+    const recipeArchived = recipe.archived === true;
+    const categoryArchived = isCategoryArchived(recipe.category);
+    
+    // Determine if recipe should be shown based on tab
+    let matchesArchivedStatus: boolean;
+    if (activeTab === 'archived') {
+      // Archived tab: show recipes that are archived OR recipes from archived categories
+      matchesArchivedStatus = recipeArchived || categoryArchived;
+    } else {
+      // Active tab: show recipes that are not archived AND not from archived categories
+      matchesArchivedStatus = !recipeArchived && !categoryArchived;
+    }
+
     // Filter by category if selected
     const matchesCategory = selectedCategory ? recipe.category === selectedCategory : true;
 
@@ -907,7 +1193,7 @@ const Recipes: React.FC = () => {
       recipe.notes.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    return matchesCategory && matchesSearch;
+    return matchesArchivedStatus && matchesCategory && matchesSearch;
   });
 
   // Print functionality
@@ -1395,14 +1681,13 @@ const Recipes: React.FC = () => {
       setExporting(true);
 
       // Fetch all recipes and categories
-      const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
-      const allCategories = categoriesDoc.exists() ? categoriesDoc.data().names || [] : [];
+      const allCategoryNames = getCategoryNames(categories);
 
       const allRecipes: Recipe[] = [];
 
-      for (const category of allCategories) {
+      for (const categoryName of allCategoryNames) {
         const categoryQuery = query(
-          getRecipeCategoryCollection(restaurantId, category),
+          getRecipeCategoryCollection(restaurantId, categoryName),
           orderBy('createdAt', 'desc')
         );
 
@@ -1423,7 +1708,7 @@ const Recipes: React.FC = () => {
         exportedAt: new Date().toISOString(),
         exportVersion: "1.0",
         restaurantId: restaurantId,
-        categories: allCategories,
+        categories: allCategoryNames,
         recipes: allRecipes
       };
 
@@ -1473,19 +1758,30 @@ const Recipes: React.FC = () => {
       setImportProgress(`Importing ${importData.recipes.length} recipes...`);
 
       // First, update categories
-      const categoriesDoc = await getDoc(getRecipeCategoriesDoc(restaurantId));
-      let existingCategories: string[] = [];
-
-      if (categoriesDoc.exists()) {
-        existingCategories = categoriesDoc.data().names || [];
-      }
-
-      // Merge new categories with existing ones
-      const allCategories = [...new Set([...existingCategories, ...importData.categories])];
+      const existingCategoryNames = getCategoryNames(categories);
+      const newCategoryNames = importData.categories || [];
+      
+      // Merge new categories with existing ones (as Category objects)
+      const mergedCategoryNames = [...new Set([...existingCategoryNames, ...newCategoryNames])];
+      const mergedCategories: Category[] = mergedCategoryNames.map(name => {
+        // Check if category already exists
+        const existing = categories.find(cat => cat.name === name);
+        if (existing) {
+          return existing; // Keep existing category with its archived status
+        }
+        // Create new category (not archived)
+        return {
+          name,
+          archived: false,
+          archivedAt: null,
+          archivedBy: null,
+        };
+      });
 
       await setDoc(getRecipeCategoriesDoc(restaurantId), {
-        names: allCategories
-      });
+        categories: mergedCategories,
+        names: mergedCategoryNames, // Keep for backward compatibility
+      }, { merge: true });
 
       // Import recipes
       let importedCount = 0;
@@ -1504,6 +1800,9 @@ const Recipes: React.FC = () => {
             notes: recipe.notes || '',
             recipeName: recipe.recipeName || recipe['recipe name'] || 'Imported Recipe',
             createdAt: new Date().toISOString(),
+            archived: false, // Imported recipes are not archived by default
+            archivedAt: null,
+            archivedBy: null,
           };
 
           // Add recipe to the appropriate category
@@ -1545,6 +1844,17 @@ const Recipes: React.FC = () => {
 
   return (
     <Layout>
+      <style>{`
+        @media (max-width: 640px) {
+          .filtersRow {
+            flex-direction: column !important;
+          }
+          .filtersRow > div {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+        }
+      `}</style>
       <div>
         <div className="flex justify-between items-center mb-4" style={{ flexDirection: 'column', gap: '1rem', alignItems: 'stretch' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
@@ -1585,47 +1895,170 @@ const Recipes: React.FC = () => {
           </div>
         </div>
 
+        {/* Active/Archived Tabs */}
+        <div style={{ 
+          marginBottom: '1.5rem',
+          borderBottom: '2px solid #e2e8f0',
+          display: 'flex',
+          gap: '0.5rem'
+        }}>
+          <button
+            onClick={() => {
+              setActiveTab('active');
+              setSearchTerm('');
+              setSelectedCategory('');
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              border: 'none',
+              background: 'transparent',
+              color: activeTab === 'active' ? '#3182ce' : '#64748b',
+              borderBottom: activeTab === 'active' ? '3px solid #3182ce' : '3px solid transparent',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'active' ? '600' : '400',
+              fontSize: '1rem',
+              transition: 'all 0.2s ease',
+              marginBottom: '-2px'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'active') {
+                e.currentTarget.style.color = '#3182ce';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'active') {
+                e.currentTarget.style.color = '#64748b';
+              }
+            }}
+          >
+            Active Recipes
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('archived');
+              setSearchTerm('');
+              setSelectedCategory('');
+            }}
+            style={{
+              padding: '0.75rem 1.5rem',
+              border: 'none',
+              background: 'transparent',
+              color: activeTab === 'archived' ? '#3182ce' : '#64748b',
+              borderBottom: activeTab === 'archived' ? '3px solid #3182ce' : '3px solid transparent',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'archived' ? '600' : '400',
+              fontSize: '1rem',
+              transition: 'all 0.2s ease',
+              marginBottom: '-2px'
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'archived') {
+                e.currentTarget.style.color = '#3182ce';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'archived') {
+                e.currentTarget.style.color = '#64748b';
+              }
+            }}
+          >
+            Archived Recipes
+          </button>
+        </div>
+
         <div className="search-filters-container" style={{ marginBottom: '1rem' }}>
-          <div className="search-row" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div className="search-container" style={{ width: '100%' }}>
-              <label className="form-label">Search Recipes:</label>
-              <div style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+          <div className="filtersRow" style={{ 
+            display: 'flex', 
+            flexDirection: 'row',
+            gap: '1rem',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap'
+          }}>
+            <div className="search-container" style={{ flex: '1', minWidth: '200px' }}>
+              <label className="form-label" style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: '500', 
+                color: '#374151',
+                marginBottom: '0.5rem',
+                display: 'block'
+              }}>
+                Search Recipes
+              </label>
+              <div style={{ position: 'relative', width: '100%' }}>
                 <input
                   type="text"
                   className="form-input"
-                  style={{ width: '100%', paddingRight: searchTerm.trim() !== '' ? '30px' : '12px' }}
+                  style={{ 
+                    width: '100%',
+                    padding: searchTerm.trim() !== '' ? '0.625rem 2.5rem 0.625rem 0.875rem' : '0.625rem 0.875rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '0.5rem',
+                    backgroundColor: '#ffffff',
+                    color: '#1f2937',
+                    fontSize: '0.875rem',
+                    fontWeight: '400',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                  }}
                   placeholder="Search by name, ingredients, category..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  onFocus={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    target.style.borderColor = '#3182ce';
+                    target.style.boxShadow = '0 0 0 3px rgba(49, 130, 206, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                  }}
+                  onBlur={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    target.style.borderColor = '#d1d5db';
+                    target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (document.activeElement !== target) {
+                      target.style.borderColor = '#9ca3af';
+                      target.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (document.activeElement !== target) {
+                      target.style.borderColor = '#d1d5db';
+                      target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                    }
+                  }}
                 />
                 {searchTerm.trim() !== '' && (
                   <button
                     onClick={() => setSearchTerm('')}
                     style={{
                       position: 'absolute',
-                      right: '8px',
+                      right: '0.625rem',
                       top: '50%',
                       transform: 'translateY(-50%)',
                       width: '20px',
                       height: '20px',
                       borderRadius: '50%',
                       backgroundColor: '#f3f4f6',
-                      border: '1px solid #d1d5db',
+                      border: 'none',
                       cursor: 'pointer',
                       color: '#6b7280',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      lineHeight: '1'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = '#e5e7eb';
                       e.currentTarget.style.color = '#374151';
+                      e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.backgroundColor = '#f3f4f6';
                       e.currentTarget.style.color = '#6b7280';
+                      e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
                     }}
                     title="Clear search"
                   >
@@ -1634,34 +2067,72 @@ const Recipes: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="filter-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'end' }}>
-              <div style={{ minWidth: '200px', flex: '1' }}>
-                <label className="form-label">Filter by Category:</label>
+            <div style={{ minWidth: '200px', flex: '0 0 auto', width: '100%', maxWidth: '300px' }}>
+              <label className="form-label" style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: '500', 
+                color: '#374151',
+                marginBottom: '0.5rem',
+                display: 'block'
+              }}>
+                Filter by Category
+              </label>
+              <div style={{ position: 'relative' }}>
                 <select
                   className="form-input"
-                  style={{ width: '100%' }}
+                  style={{ 
+                    width: '100%',
+                    padding: '0.625rem 2.5rem 0.625rem 0.875rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '0.5rem',
+                    backgroundColor: '#ffffff',
+                    color: '#1f2937',
+                    fontSize: '0.875rem',
+                    fontWeight: '400',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2 4L6 8L10 4' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 0.75rem center',
+                    backgroundSize: '12px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                  }}
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
+                  onFocus={(e) => {
+                    const target = e.target as HTMLSelectElement;
+                    target.style.borderColor = '#3182ce';
+                    target.style.boxShadow = '0 0 0 3px rgba(49, 130, 206, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                  }}
+                  onBlur={(e) => {
+                    const target = e.target as HTMLSelectElement;
+                    target.style.borderColor = '#d1d5db';
+                    target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                  }}
+                  onMouseEnter={(e) => {
+                    const target = e.target as HTMLSelectElement;
+                    if (document.activeElement !== target) {
+                      target.style.borderColor = '#9ca3af';
+                      target.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    const target = e.target as HTMLSelectElement;
+                    if (document.activeElement !== target) {
+                      target.style.borderColor = '#d1d5db';
+                      target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                    }
+                  }}
                 >
                   <option value="">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category} value={category}>{category}</option>
+                  {(activeTab === 'archived' ? getArchivedCategories() : getActiveCategories()).map(category => (
+                    <option key={category.name} value={category.name}>{category.name}</option>
                   ))}
                 </select>
               </div>
-              {(searchTerm.trim() !== '' || selectedCategory !== '') && (
-                <div>
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setSelectedCategory('');
-                    }}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1749,6 +2220,31 @@ const Recipes: React.FC = () => {
                       >
                         Edit
                       </button>
+                      {activeTab === 'active' ? (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to archive this recipe?')) {
+                              handleArchive(recipe);
+                            }
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          title="Archive Recipe"
+                        >
+                          Archive
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to restore this recipe?')) {
+                              handleRestore(recipe);
+                            }
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          title="Restore Recipe"
+                        >
+                          Restore
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(recipe)}
                         className="btn btn-error btn-sm"
@@ -1819,17 +2315,63 @@ const Recipes: React.FC = () => {
 
                 <div className="form-group">
                   <label className="form-label">Category</label>
-                  <select
-                    className="form-input"
-                    value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                    required
-                  >
-                    <option value="">Select Category</option>
-                    {categories.map(category => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
-                  </select>
+                  <div style={{ position: 'relative' }}>
+                    <select
+                      className="form-input"
+                      style={{ 
+                        width: '100%',
+                        padding: '0.625rem 2.5rem 0.625rem 0.875rem',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#ffffff',
+                        color: '#1f2937',
+                        fontSize: '0.875rem',
+                        fontWeight: '400',
+                        cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2 4L6 8L10 4' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 0.75rem center',
+                        backgroundSize: '12px',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                      }}
+                      value={formData.category}
+                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                      onFocus={(e) => {
+                        const target = e.target as HTMLSelectElement;
+                        target.style.borderColor = '#3182ce';
+                        target.style.boxShadow = '0 0 0 3px rgba(49, 130, 206, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                      }}
+                      onBlur={(e) => {
+                        const target = e.target as HTMLSelectElement;
+                        target.style.borderColor = '#d1d5db';
+                        target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                      }}
+                      onMouseEnter={(e) => {
+                        const target = e.target as HTMLSelectElement;
+                        if (document.activeElement !== target) {
+                          target.style.borderColor = '#9ca3af';
+                          target.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        const target = e.target as HTMLSelectElement;
+                        if (document.activeElement !== target) {
+                          target.style.borderColor = '#d1d5db';
+                          target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                        }
+                      }}
+                      required
+                    >
+                      <option value="">Select Category</option>
+                      {getActiveCategories().map(category => (
+                        <option key={category.name} value={category.name}>{category.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Copy to Additional Venues */}
@@ -2308,16 +2850,63 @@ const Recipes: React.FC = () => {
               <div className="modal-body">
                 <div className="space-y-4">
                   <p className="text-gray-600 mb-4">
-                    Edit category names using the ✏️ button, drag categories by the handle (☰) to reorder them. Delete categories you no longer need. Note: Recipes in deleted categories will remain but won't be visible until moved to another category.
+                    Edit category names using the ✏️ button, drag categories by the handle (☰) to reorder them. Archive categories to hide them and their recipes, or delete categories you no longer need. Note: Recipes in deleted categories will remain but won't be visible until moved to another category.
                   </p>
                   
-                  {categories.length === 0 ? (
-                    <p className="text-gray-500">No categories available.</p>
+                  {/* Category Tabs */}
+                  <div style={{ 
+                    borderBottom: '2px solid #e2e8f0',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <button
+                      onClick={() => setCategoryTab('active')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        border: 'none',
+                        background: 'transparent',
+                        color: categoryTab === 'active' ? '#3182ce' : '#64748b',
+                        borderBottom: categoryTab === 'active' ? '3px solid #3182ce' : '3px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: categoryTab === 'active' ? '600' : '400',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s ease',
+                        marginBottom: '-2px'
+                      }}
+                    >
+                      Active Categories
+                    </button>
+                    <button
+                      onClick={() => setCategoryTab('archived')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        border: 'none',
+                        background: 'transparent',
+                        color: categoryTab === 'archived' ? '#3182ce' : '#64748b',
+                        borderBottom: categoryTab === 'archived' ? '3px solid #3182ce' : '3px solid transparent',
+                        cursor: 'pointer',
+                        fontWeight: categoryTab === 'archived' ? '600' : '400',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s ease',
+                        marginBottom: '-2px'
+                      }}
+                    >
+                      Archived Categories
+                    </button>
+                  </div>
+                  
+                  {getDisplayCategories().length === 0 ? (
+                    <p className="text-gray-500">
+                      {categoryTab === 'archived' 
+                        ? 'No archived categories.' 
+                        : 'No categories available.'}
+                    </p>
                   ) : (
                     <div className="space-y-2">
-                      {categories.map((category, index) => (
+                      {getDisplayCategories().map((category, index) => (
                         <div
-                          key={category}
+                          key={category.name}
                           draggable
                           onDragStart={(e) => handleCategoryDragStart(e, index)}
                           onDragOver={handleCategoryDragOver}
@@ -2394,8 +2983,13 @@ const Recipes: React.FC = () => {
                                 </div>
                               ) : (
                                 <>
-                                  <span className="font-medium">{category}</span>
+                                  <span className="font-medium">{category.name}</span>
                                   <span className="text-xs text-gray-400">({index + 1})</span>
+                                  {category.archived && (
+                                    <span className="text-xs text-gray-500" style={{ fontStyle: 'italic' }}>
+                                      (Archived)
+                                    </span>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -2419,11 +3013,48 @@ const Recipes: React.FC = () => {
                               >
                                 ✏️
                               </button>
+                              {categoryTab === 'active' ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleArchiveCategory(category.name);
+                                  }}
+                                  className="btn btn-sm"
+                                  style={{
+                                    backgroundColor: '#6b7280',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '4px 8px',
+                                    fontSize: '12px'
+                                  }}
+                                  title="Archive category"
+                                >
+                                  Archive
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRestoreCategory(category.name);
+                                  }}
+                                  className="btn btn-sm"
+                                  style={{
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '4px 8px',
+                                    fontSize: '12px'
+                                  }}
+                                  title="Restore category"
+                                >
+                                  Restore
+                                </button>
+                              )}
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (window.confirm(`Are you sure you want to delete the "${category}" category?`)) {
-                                    deleteCategory(category);
+                                  if (window.confirm(`Are you sure you want to delete the "${category.name}" category?`)) {
+                                    deleteCategory(category.name);
                                   }
                                 }}
                                 className="btn btn-sm"
