@@ -95,6 +95,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     Closing
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    to="/opening"
+                    className={`nav-link ${isActiveRoute('/opening') ? 'active' : ''}`}
+                  >
+                    Opening
+                  </Link>
+                </li>
               </ul>
             </nav>
 
@@ -309,6 +317,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isActiveRoute('/closing') ? 'var(--border-light)' : 'transparent'}
                       >
                         Closing
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        to="/opening"
+                        style={{
+                          display: 'block',
+                          padding: '0.5rem 1rem',
+                          color: isActiveRoute('/opening') ? 'var(--primary-color)' : 'var(--text-primary)',
+                          textDecoration: 'none',
+                          fontSize: '0.875rem',
+                          backgroundColor: isActiveRoute('/opening') ? 'var(--border-light)' : 'transparent'
+                        }}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--border-light)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = isActiveRoute('/opening') ? 'var(--border-light)' : 'transparent'}
+                      >
+                        Opening
                       </Link>
                     </li>
                   </ul>

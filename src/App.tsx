@@ -10,6 +10,7 @@ import UserManagement from './components/users/UserManagement';
 import Suppliers from './components/suppliers/Suppliers';
 import Fridges from './components/fridges/Fridges';
 import Closing from './components/closing/Closing';
+import Opening from './components/opening/Opening';
 import './styles/global.css';
 import './index.css';
 
@@ -73,6 +74,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Closing />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opening"
+            element={
+              <ProtectedRoute>
+                <Opening />
               </ProtectedRoute>
             }
           />

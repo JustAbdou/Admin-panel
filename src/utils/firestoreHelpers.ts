@@ -37,6 +37,11 @@ export const getClosingListCollection = (restaurantId: string): CollectionRefere
 };
 
 
+export const getOpeningListCollection = (restaurantId: string): CollectionReference => {
+  return getRestaurantCollection(restaurantId, 'openinglist');
+};
+
+
 export const getInvoicesCollection = (restaurantId: string): CollectionReference => {
   return getRestaurantCollection(restaurantId, 'invoices');
 };
