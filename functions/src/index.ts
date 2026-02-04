@@ -9,7 +9,7 @@ admin.initializeApp();
  */
 export const resetChecklistsDaily = functions.pubsub.schedule("0 2 * * *")
   .timeZone("Europe/Paris") // GMT+1 timezone
-  .onRun(async (context) => {
+  .onRun(async (context: functions.EventContext) => {
     console.log("Starting daily reset of closing and opening checklist items");
 
     const db = admin.firestore();
@@ -41,7 +41,7 @@ export const resetChecklistsDaily = functions.pubsub.schedule("0 2 * * *")
         if (closingItemsSnapshot.size > 0) {
           const closingBatch = db.batch();
 
-          closingItemsSnapshot.docs.forEach((doc) => {
+          closingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
             closingBatch.update(doc.ref, {
               done: false
             });
@@ -66,7 +66,7 @@ export const resetChecklistsDaily = functions.pubsub.schedule("0 2 * * *")
         if (openingItemsSnapshot.size > 0) {
           const openingBatch = db.batch();
 
-          openingItemsSnapshot.docs.forEach((doc) => {
+          openingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
             openingBatch.update(doc.ref, {
               done: false
             });
@@ -116,52 +116,52 @@ export const resetChecklistsDaily = functions.pubsub.schedule("0 2 * * *")
  */
 export const resetOpeningChecklistDaily = functions.pubsub.schedule("0 2 * * *")
   .timeZone("Europe/Paris") // GMT+1 timezone
-  .onRun(async (context) => {
+  .onRun(async (context: functions.EventContext) => {
     console.log("Starting daily reset of opening checklist items");
-    
+
     const db = admin.firestore();
-    
+
     try {
       // Get all restaurants
       const restaurantsSnapshot = await db.collection("restaurants").get();
-      
+
       let totalUpdatedItems = 0;
-      
+
       // Process each restaurant
       for (const restaurantDoc of restaurantsSnapshot.docs) {
         const restaurantId = restaurantDoc.id;
-        
+
         console.log(`Processing restaurant: ${restaurantId}`);
-        
+
         // Get all opening checklist items for this restaurant
         const openingItemsRef = db.collection("restaurants")
           .doc(restaurantId)
           .collection("openinglist");
-        
+
         const openingItemsSnapshot = await openingItemsRef
           .where("done", "==", true)
           .get();
-        
+
         console.log(`Found ${openingItemsSnapshot.size} completed items for restaurant ${restaurantId}`);
-        
+
         // Reset all completed items to not done
         const batch = db.batch();
-        
-        openingItemsSnapshot.docs.forEach((doc) => {
+
+        openingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
           batch.update(doc.ref, {
             done: false
           });
         });
-        
+
         if (openingItemsSnapshot.size > 0) {
           await batch.commit();
           totalUpdatedItems += openingItemsSnapshot.size;
           console.log(`Reset ${openingItemsSnapshot.size} items for restaurant ${restaurantId}`);
         }
       }
-      
+
       console.log(`Daily reset completed successfully. Total items reset: ${totalUpdatedItems}`);
-      
+
       // Log the reset activity to a separate collection for tracking
       await db.collection("system_logs").add({
         action: "daily_opening_reset",
@@ -171,12 +171,12 @@ export const resetOpeningChecklistDaily = functions.pubsub.schedule("0 2 * * *")
         executedAt: "3AM_GMT+1",
         success: true
       });
-      
+
       return null;
-      
+
     } catch (error: any) {
       console.error("Error during daily reset:", error);
-      
+
       // Log the error
       await db.collection("system_logs").add({
         action: "daily_opening_reset",
@@ -184,7 +184,7 @@ export const resetOpeningChecklistDaily = functions.pubsub.schedule("0 2 * * *")
         error: error.message,
         success: false
       });
-      
+
       throw error;
     }
   });
@@ -193,7 +193,7 @@ export const resetOpeningChecklistDaily = functions.pubsub.schedule("0 2 * * *")
  * HTTP function for manual reset (can be called via HTTP request)
  * Useful for testing or manual resets
  */
-export const resetChecklistsManual = functions.https.onRequest(async (req, res) => {
+export const resetChecklistsManual = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
   console.log("Manual reset of closing and opening checklist items triggered");
 
   const db = admin.firestore();
@@ -220,7 +220,7 @@ export const resetChecklistsManual = functions.https.onRequest(async (req, res) 
       if (closingItemsSnapshot.size > 0) {
         const closingBatch = db.batch();
 
-        closingItemsSnapshot.docs.forEach((doc) => {
+        closingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
           closingBatch.update(doc.ref, {
             done: false
           });
@@ -242,7 +242,7 @@ export const resetChecklistsManual = functions.https.onRequest(async (req, res) 
       if (openingItemsSnapshot.size > 0) {
         const openingBatch = db.batch();
 
-        openingItemsSnapshot.docs.forEach((doc) => {
+        openingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
           openingBatch.update(doc.ref, {
             done: false
           });
@@ -290,44 +290,44 @@ export const resetChecklistsManual = functions.https.onRequest(async (req, res) 
  * HTTP function for manual reset of opening checklist (can be called via HTTP request)
  * Useful for testing or manual resets
  */
-export const resetOpeningChecklistManual = functions.https.onRequest(async (req, res) => {
+export const resetOpeningChecklistManual = functions.https.onRequest(async (req: functions.https.Request, res: functions.Response) => {
   console.log("Manual reset of opening checklist items triggered");
-  
+
   const db = admin.firestore();
-  
+
   try {
     // Get all restaurants
     const restaurantsSnapshot = await db.collection("restaurants").get();
-    
+
     let totalUpdatedItems = 0;
-    
+
     for (const restaurantDoc of restaurantsSnapshot.docs) {
       const restaurantId = restaurantDoc.id;
-      
+
       const openingItemsRef = db.collection("restaurants")
         .doc(restaurantId)
         .collection("openinglist");
-      
+
       const openingItemsSnapshot = await openingItemsRef
         .where("done", "==", true)
         .get();
-      
+
       const batch = db.batch();
-      
-      openingItemsSnapshot.docs.forEach((doc) => {
+
+      openingItemsSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
         batch.update(doc.ref, {
           done: false
         });
       });
-      
+
       if (openingItemsSnapshot.size > 0) {
         await batch.commit();
         totalUpdatedItems += openingItemsSnapshot.size;
       }
     }
-    
+
     console.log(`Manual reset completed. Total items reset: ${totalUpdatedItems}`);
-    
+
     // Log the manual reset
     await db.collection("system_logs").add({
       action: "manual_opening_reset",
@@ -337,19 +337,19 @@ export const resetOpeningChecklistManual = functions.https.onRequest(async (req,
       triggeredBy: "http_request",
       success: true
     });
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       totalItemsReset: totalUpdatedItems,
       message: `Successfully reset ${totalUpdatedItems} opening checklist items across all restaurants.`
     });
-    
+
   } catch (error: any) {
     console.error("Error during manual reset:", error);
-    
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
