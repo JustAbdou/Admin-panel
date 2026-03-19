@@ -278,21 +278,16 @@ const Dashboard: React.FC = () => {
         historyMap.set(key, false);
       }
 
-      // Explicitly filter for fridge definition documents
-      // Fridge definitions have: fridgeName, fridgeType, temperatureAM, temperaturePM, done, restaurantId
-      // They do NOT have createdAt (that's for log entries)
-      // Additional safety: ensure fridgeName exists and is not empty
+      // Filter for fridge definition documents (from both admin panel and app)
+      // App may add createdAt when creating - include those too
+      type FridgeDoc = { id: string; fridgeName: string; fridgeType?: string; temperatureAM?: unknown; temperaturePM?: unknown; [k: string]: unknown };
       const allFridges = snapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          return { id: doc.id, ...data };
+        .map(d => {
+          const data = d.data();
+          return { id: d.id, ...data } as FridgeDoc & Record<string, unknown>;
         })
-        .filter(data => {
-          // Explicit filtering: must have fridgeName and no createdAt
-          // This identifies fridge definition documents vs log entries
-          const hasFridgeName = data.fridgeName && typeof data.fridgeName === 'string' && data.fridgeName.trim() !== '';
-          const isNotLogEntry = !data.createdAt; // Log entries have createdAt
-          return hasFridgeName && isNotLogEntry;
+        .filter((data): data is FridgeDoc => {
+          return !!(data.fridgeName && typeof data.fridgeName === 'string' && data.fridgeName.trim() !== '');
         });
 
       // Debug log: show what fridges we're checking

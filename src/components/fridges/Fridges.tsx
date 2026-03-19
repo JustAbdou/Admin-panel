@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { query, onSnapshot } from 'firebase/firestore';
 import { useRestaurant } from '../../contexts/RestaurantContext';
-import { getFridgeNamesFromLogs, createFridgeLogDocument, deleteFridgeLogDocument } from '../../utils/firestoreHelpers';
+import { getFridgeLogsCollection, createFridgeLogDocument, deleteFridgeLogDocument } from '../../utils/firestoreHelpers';
 import Layout from '../layout/Layout';
 
 const Fridges: React.FC = () => {
@@ -16,20 +17,27 @@ const Fridges: React.FC = () => {
   useEffect(() => {
     if (!restaurantId) return;
 
-    const fetchFridges = async () => {
-      try {
-        setLoading(true);
-        const fridgeData = await getFridgeNamesFromLogs(restaurantId);
-        setFridges(fridgeData);
-      } catch (error) {
-        console.error('Error fetching fridge names:', error);
-        setFridges([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const fridgeQuery = query(getFridgeLogsCollection(restaurantId));
+    const unsubscribe = onSnapshot(fridgeQuery, (snapshot) => {
+      const fridgeData = snapshot.docs
+        .map(d => d.data())
+        .filter(data => data.fridgeName && typeof data.fridgeName === 'string' && data.fridgeName.trim() !== '')
+        .map(data => ({
+          name: data.fridgeName.trim(),
+          type: (data.fridgeType || 'fridge') as 'fridge' | 'freezer'
+        }));
+      const uniqueFridges = fridgeData.filter((fridge, index, self) =>
+        index === self.findIndex(f => f.name === fridge.name)
+      );
+      setFridges(uniqueFridges);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to fridges:', error);
+      setFridges([]);
+      setLoading(false);
+    });
 
-    fetchFridges();
+    return () => unsubscribe();
   }, [restaurantId]);
 
   const handleAddFridge = async (e: React.FormEvent) => {
@@ -39,12 +47,7 @@ const Fridges: React.FC = () => {
     try {
       setAdding(true);
       
-      // Create fridge log document for this fridge
       await createFridgeLogDocument(restaurantId, newFridgeName.trim(), newFridgeType, user.uid);
-      
-      // Refresh the fridges list
-      const updatedFridges = await getFridgeNamesFromLogs(restaurantId);
-      setFridges(updatedFridges);
       setNewFridgeName('');
       setNewFridgeType('fridge');
       setShowAddModal(false);
@@ -61,13 +64,7 @@ const Fridges: React.FC = () => {
 
     try {
       setDeleting(fridgeName);
-      
-      // Delete fridge log document
       await deleteFridgeLogDocument(restaurantId, fridgeName);
-      
-      // Refresh the fridges list
-      const updatedFridges = await getFridgeNamesFromLogs(restaurantId);
-      setFridges(updatedFridges);
     } catch (error) {
       console.error('Error deleting fridge:', error);
       alert('Error deleting fridge. Please try again.');

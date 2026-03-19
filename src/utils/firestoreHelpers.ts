@@ -1,4 +1,4 @@
-import { collection, doc, CollectionReference, DocumentReference, getDoc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, CollectionReference, DocumentReference, getDoc, setDoc, getDocs, deleteDoc, updateDoc, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -261,14 +261,16 @@ export const updateFridgeTemperature = async (
 };
 
 // Get fridge data from fridge logs collection
+// Includes all fridge definition docs (from both admin panel and app)
+// App may add createdAt when creating fridges - we include those too
 export const getFridgeNamesFromLogs = async (restaurantId: string): Promise<{name: string, type: 'fridge' | 'freezer'}[]> => {
   const fridgeLogsCollection = getFridgeLogsCollection(restaurantId);
   const snapshot = await getDocs(fridgeLogsCollection);
   const fridgeData = snapshot.docs
     .map(doc => doc.data())
-    .filter(data => !data.createdAt) // Only items without createdAt field
+    .filter(data => data.fridgeName && typeof data.fridgeName === 'string' && data.fridgeName.trim() !== '')
     .map(data => ({
-      name: data.fridgeName,
+      name: data.fridgeName.trim(),
       type: data.fridgeType || 'fridge' // Default to 'fridge' for existing entries
     }));
   
@@ -292,13 +294,17 @@ export const getSupplierNamesFromLogs = async (restaurantId: string): Promise<st
 };
 
 // Delete fridge log document
+// Uses query by fridgeName to support both doc ID = fridgeName (admin) and auto-generated ID (app)
 export const deleteFridgeLogDocument = async (
   restaurantId: string, 
   fridgeName: string
 ): Promise<void> => {
   const fridgeLogsCollection = getFridgeLogsCollection(restaurantId);
-  const docRef = doc(fridgeLogsCollection, fridgeName);
-  await deleteDoc(docRef);
+  const q = query(fridgeLogsCollection, where('fridgeName', '==', fridgeName));
+  const snapshot = await getDocs(q);
+  for (const d of snapshot.docs) {
+    await deleteDoc(d.ref);
+  }
 };
 
 // Delete delivery log document
